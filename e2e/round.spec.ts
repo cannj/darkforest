@@ -33,11 +33,12 @@ test('两个隔离浏览器在石室完成真实联机回合', async ({ browser 
   expect(secondMessages.length).toBeGreaterThan(0);
   for (const payload of secondMessages) {
     const message = serverMessageSchema.parse(JSON.parse(payload));
+    if (message.kind === 'session') continue;
     expect(message.kind).toBe('view');
     if (message.kind === 'view') {
       expect(message.view.self).toEqual({ id: 'p2', position: { row: 3, col: 3 } });
       expect(message.view.plan).toEqual({ kind: 'draft', moves: [] });
-      expect(Object.keys(message.view).sort()).toEqual(['beats', 'board', 'confrontations', 'memory', 'observation', 'phase', 'plan', 'playback', 'result', 'roomId', 'round', 'seats', 'self', 'terrainMemory']);
+      expect(Object.keys(message.view).sort()).toEqual(['beats', 'board', 'confrontations', 'deadline', 'memory', 'observation', 'phase', 'plan', 'playback', 'result', 'roomId', 'round', 'seats', 'self', 'serverTime', 'terrainMemory']);
     }
   }
   await second.getByRole('button', { name: '北 ↑', exact: true }).click();

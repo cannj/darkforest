@@ -1,6 +1,9 @@
-import { expect, test } from 'vitest';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { publicBoard, type Board } from '../src/shared/protocol.js';
 import { Room } from '../src/server/room.js';
+
+beforeEach(() => vi.useFakeTimers({ now: 0 }));
+afterEach(() => vi.useRealTimers());
 
 test('两名玩家秘密锁定单步计划后共同进入下一回合', () => {
   const room = new Room('first-round');
