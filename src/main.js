@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RenderPixelatedPass } from 'three/addons/postprocessing/RenderPixelatedPass.js';
 import { buildRoom, braziers } from './room.js';
+import { mountGame } from './client/game.ts';
 
 const canvas = document.querySelector('#room');
 const stage = document.querySelector('.stage');
@@ -193,6 +194,70 @@ function start() {
   orbit.saveState();
 
   const animateFire = buildRoom(scene, material);
+  const board = new THREE.Group();
+  const pawn = new THREE.Mesh(new THREE.OctahedronGeometry(0.38), material('ember', 0, { glow: 0.9 }));
+  const pawnBase = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.14, 0.55), material('ember', 0, { glow: 0.52 }));
+  scene.add(board, pawn, pawnBase);
+  const dynamic = new THREE.Group();
+  scene.add(dynamic);
+  const tiles = new Map();
+  const terrainMaterials = {
+    stone: { visible: material('stone', 0.08), fog: material('stone', 0, { glow: 0.04 }) },
+    moss: { visible: material('moss', 0.1), fog: material('moss', 0, { glow: 0.04 }) },
+  };
+  const targetMaterial = material('moss', 0, { glow: 0.9 });
+  const memoryMaterial = material('stone', 0, { glow: 0.55 });
+  memoryMaterial.wireframe = true;
+  const targetGeometry = new THREE.OctahedronGeometry(0.33);
+  const memoryGeometry = new THREE.BoxGeometry(0.72, 0.18, 0.72);
+  let boardVersion;
+  mountGame((view) => {
+    const x = (col) => col - (view.board.cols - 1) / 2;
+    const z = (row) => row - (view.board.rows - 1) / 2;
+    if (boardVersion !== view.board.version) {
+      for (const mesh of board.children) mesh.geometry.dispose();
+      board.clear();
+      tiles.clear();
+      for (const cell of view.board.cells) {
+        const tile = new THREE.Mesh(new THREE.BoxGeometry(0.94, 0.06, 0.94), terrainMaterials[cell.terrain].fog);
+        tile.position.set(x(cell.col), 0.12, z(cell.row));
+        tiles.set(`${cell.row},${cell.col}`, { tile, terrain: cell.terrain });
+        board.add(tile);
+      }
+      for (const edge of view.board.edges) {
+        const horizontal = edge.a.row !== edge.b.row;
+        const height = edge.kind === 'wall' ? 0.5 : 0.28;
+        const cue = new THREE.Mesh(new THREE.BoxGeometry(horizontal ? 0.9 : 0.1, height, horizontal ? 0.1 : 0.9),
+          material(edge.kind === 'door' ? 'ember' : 'stone', 0, { glow: edge.kind === 'window' ? 0.55 : 0.25 }));
+        cue.position.set(x((edge.a.col + edge.b.col) / 2), 0.18 + height / 2, z((edge.a.row + edge.b.row) / 2));
+        if (edge.kind === 'window') cue.material.wireframe = true;
+        board.add(cue);
+      }
+      boardVersion = view.board.version;
+    }
+    const visible = new Set(view.observation.cells.map((c) => `${c.row},${c.col}`));
+    for (const [key, { tile, terrain }] of tiles) tile.material = terrainMaterials[terrain][visible.has(key) ? 'visible' : 'fog'];
+    dynamic.clear();
+    for (const player of view.observation.players) {
+      const target = new THREE.Mesh(targetGeometry, targetMaterial);
+      target.position.set(x(player.position.col), 0.65, z(player.position.row));
+      dynamic.add(target);
+    }
+    for (const sighting of view.memory) {
+      if (view.observation.players.some((p) => p.id === sighting.id)) continue;
+      const marker = new THREE.Mesh(memoryGeometry, memoryMaterial);
+      marker.position.set(x(sighting.position.col), 0.3, z(sighting.position.row));
+      dynamic.add(marker);
+    }
+    pawn.position.set(x(view.self.position.col), 0.65, z(view.self.position.row));
+    pawnBase.position.set(pawn.position.x, 0.25, pawn.position.z);
+    canvas.dataset.round = String(view.round);
+    canvas.dataset.position = `${view.self.position.row},${view.self.position.col}`;
+    canvas.dataset.visiblePlayers = view.observation.players.map((p) => p.id).join(',');
+    canvas.dataset.visibleCells = String(visible.size);
+    canvas.setAttribute('aria-label', `公开棋盘，自己的棋子位于行 ${view.self.position.row} 列 ${view.self.position.col}。当前可见 ${visible.size} 格、${view.observation.players.length} 名目标。拖动或按方向键旋转视角。`);
+    viewChanged = true;
+  });
   const edges = { normalEdgeStrength: 0.14, depthEdgeStrength: 0.22 };
   // The canvas is already the low-resolution target. CSS scales the completed frame.
   const pass = new RenderPixelatedPass(1, scene, camera, edges);
