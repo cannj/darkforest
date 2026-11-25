@@ -34,14 +34,29 @@ export function digest(value: unknown): string {
   return createHash('sha256').update(canonical).digest('hex');
 }
 
+export function isolateRecordingFailure(roomId: string, write: (entry: MatchRecord) => void): (entry: MatchRecord) => void {
+  let failed = false;
+  return entry => {
+    if (failed) return;
+    try { write(entry); }
+    catch (error) {
+      failed = true;
+      console.error({ event: 'match-recording-disabled', roomId, error });
+    }
+  };
+}
+
 export function createRecorder(directory: string, roomId: string): (entry: MatchRecord) => void {
   roomIdSchema.parse(roomId);
-  mkdirSync(directory, { recursive: true });
   const path = join(directory, `${roomId}-${randomUUID()}.jsonl`);
   let started = false;
-  return entry => {
+  return isolateRecordingFailure(roomId, entry => {
     const line = JSON.stringify(entry) + '\n';
-    if (!started) { writeFileSync(path, line, { flag: 'wx', mode: 0o600 }); started = true; }
+    if (!started) {
+      mkdirSync(directory, { recursive: true });
+      writeFileSync(path, line, { flag: 'wx', mode: 0o600 });
+      started = true;
+    }
     else appendFileSync(path, line);
-  };
+  });
 }
