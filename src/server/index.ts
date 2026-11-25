@@ -46,9 +46,11 @@ server.on('connection', (socket, request) => {
       send(socket, { kind: 'error', message: '消息必须是 JSON' });
       return;
     }
+    const previousRound = room.view(identity).round;
     const result = room.command(identity, input);
     if (result.kind === 'rejected') send(socket, { kind: 'error', message: result.message });
-    else broadcast(room);
+    else if (room.view(identity).round !== previousRound) broadcast(room);
+    else send(socket, { kind: 'view', view: room.view(identity) });
   });
   socket.on('close', () => connections.delete(socket));
   socket.on('error', () => socket.close());

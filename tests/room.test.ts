@@ -1,4 +1,5 @@
 import { expect, test } from 'vitest';
+import { publicBoard, type Board } from '../src/shared/protocol.js';
 import { Room } from '../src/server/room.js';
 
 test('两名玩家秘密锁定单步计划后共同进入下一回合', () => {
@@ -32,7 +33,9 @@ test('两拍斜向移动逐拍提交并只向自己显示结果', () => {
     { round: 1, beat: 1, from: { row: 1, col: 1 }, to: { row: 2, col: 2 }, result: 'moved' },
     { round: 1, beat: 2, from: { row: 2, col: 2 }, to: { row: 3, col: 2 }, result: 'moved' },
   ]);
-  expect(JSON.stringify(room.view(b))).not.toContain('"col":2');
+  expect(room.view(b).beats.every((beat) => beat.from.col === 3 && beat.to.col === 3)).toBe(true);
+  expect(room.view(b).playback[0]?.memory[0]?.position).toEqual({ row: 2, col: 2 });
+  expect(room.view(b).playback[1]?.memory[0]?.position).toEqual({ row: 3, col: 2 });
 });
 
 test('移动额度独立于等待拍，超额或超长计划被拒绝且不覆盖原草稿', () => {
@@ -113,4 +116,107 @@ test('自己的回放拍数不透露对手私密计划的长度', () => {
   const short = ownView([]);
   expect(short.beats).toHaveLength(4);
   expect(ownView([null, null, null, { row: 4, col: 4 }])).toEqual(short);
+});
+
+test('身边一圈含斜角可见，圈外玩家留在迷雾中', () => {
+  const room = new Room('visibility');
+  const a = room.join();
+  room.join();
+  expect(room.view(a).observation.cells).toHaveLength(9);
+  expect(room.view(a).observation.cells).toContainEqual({ row: 2, col: 2 });
+  expect(room.view(a).observation.players).toEqual([]);
+  expect(room.view(a).memory).toEqual([]);
+});
+
+test('短暂目击按拍授权，消失后保留时间和位置，隐藏路径不进入回放', () => {
+  const room = new Room('fleeting');
+  const a = room.join(); const b = room.join();
+  room.command(b, { kind: 'plan', round: 1, requestId: 'bp', moves: [{ row: 2, col: 2 }, { row: 3, col: 2 }] });
+  room.command(a, { kind: 'lock', round: 1, requestId: 'al' });
+  room.command(b, { kind: 'lock', round: 1, requestId: 'bl' });
+  expect(room.view(a).playback.map((f) => f.observation.players)).toEqual([
+    [{ id: b, position: { row: 2, col: 2 } }], [], [], [],
+  ]);
+  expect(room.view(a).observation.players).toEqual([]);
+  expect(room.view(a).memory).toEqual([{ id: b, position: { row: 2, col: 2 }, round: 1, beat: 1 }]);
+  expect(room.view(a).playback[0]?.memory).toEqual(room.view(a).memory);
+  expect(JSON.stringify(room.view(a))).not.toContain('"position":{"row":3,"col":2}');
+  room.command(a, { kind: 'lock', round: 2, requestId: 'al2' });
+  room.command(b, { kind: 'lock', round: 2, requestId: 'bl2' });
+  expect(room.view(a).memory).toEqual([{ id: b, position: { row: 2, col: 2 }, round: 1, beat: 1 }]);
+});
+
+test.each(['wall', 'door', 'window'] satisfies Board['edges'][number]['kind'][])('公开%s格边和动态状态分别决定视野与正交通行', (kind) => {
+  const board: Board = { ...publicBoard, version: `edge-${kind}`, edges: [{ id: 'test-edge', a: { row: 1, col: 1 }, b: { row: 1, col: 2 }, kind }] };
+  const room = new Room('edge', { board, terrain: { doors: kind === 'door' ? { 'test-edge': false } : {} }, spawns: [{ row: 1, col: 1 }, { row: 1, col: 2 }] });
+  const a = room.join(); const b = room.join();
+  expect(room.view(a).board.edges[0]?.kind).toBe(kind);
+  expect(room.view(a).observation.players.length).toBe(kind === 'window' ? 1 : 0);
+  expect(room.view(a).observation.cells.some((p) => p.row === 2 && p.col === 2)).toBe(kind === 'window');
+  room.command(b, { kind: 'plan', round: 1, requestId: 'bp', moves: [{ row: 0, col: 2 }] });
+  room.command(a, { kind: 'plan', round: 1, requestId: 'ap', moves: [null, { row: 1, col: 2 }] });
+  room.command(a, { kind: 'lock', round: 1, requestId: 'al' });
+  room.command(b, { kind: 'lock', round: 1, requestId: 'bl' });
+  expect(room.view(a).self.position).toEqual(kind === 'window' ? { row: 1, col: 2 } : { row: 1, col: 1 });
+});
+
+test('透明窗允许斜角视野，但斜向翻窗不穿角', () => {
+  const room = new Room('window-corner', { board: { ...publicBoard, edges: [{ id: 'w', a: { row: 1, col: 1 }, b: { row: 1, col: 2 }, kind: 'window' }] } });
+  const a = room.join(); const b = room.join();
+  expect(room.view(a).observation.cells).toContainEqual({ row: 2, col: 2 });
+  room.command(a, { kind: 'plan', round: 1, requestId: 'p', moves: [{ row: 2, col: 2 }] });
+  room.command(a, { kind: 'lock', round: 1, requestId: 'al' });
+  room.command(b, { kind: 'lock', round: 1, requestId: 'bl' });
+  expect(room.view(a).self.position).toEqual({ row: 1, col: 1 });
+});
+
+test('地图和视距通过房间配置，非法布局在创建时被拒绝', () => {
+  const room = new Room('range', { visionRange: 2, board: { ...publicBoard, edges: [] } });
+  const a = room.join(); room.join();
+  expect(room.view(a).observation.players).toEqual([{ id: 'p2', position: { row: 3, col: 3 } }]);
+  expect(() => new Room('bad', { board: { ...publicBoard, cells: [...publicBoard.cells, publicBoard.cells[0]] } })).toThrow();
+  expect(() => new Room('bad', { board: { ...publicBoard, edges: [{ id: 'bad', kind: 'wall', a: { row: 0, col: 0 }, b: { row: 1, col: 1 } }] } })).toThrow();
+  expect(() => new Room('bad', { board: { ...publicBoard, edges: [...publicBoard.edges, ...publicBoard.edges] } })).toThrow();
+});
+
+test('可见门状态留下时间记忆，雾中的动态门状态不下发', () => {
+  const board: Board = { ...publicBoard, edges: [
+    { id: 'near', a: { row: 1, col: 1 }, b: { row: 1, col: 2 }, kind: 'door' },
+    { id: 'far', a: { row: 4, col: 3 }, b: { row: 4, col: 4 }, kind: 'door' },
+  ] };
+  const room = new Room('doors', { board, terrain: { doors: { near: true, far: true } } });
+  const a = room.join(); room.join();
+  expect(room.view(a).observation.cells).toContainEqual({ row: 1, col: 2 });
+  expect(room.view(a).observation.doors).toEqual([{ id: 'near', open: true }]);
+  expect(room.view(a).terrainMemory).toEqual([{ id: 'near', open: true, round: 1, beat: 0 }]);
+});
+
+test('尾部等待拍不掩盖上轮已执行的移动', () => {
+  const room = new Room('summary'); const a = room.join(); const b = room.join();
+  room.command(a, { kind: 'plan', round: 1, requestId: 'p', moves: [{ row: 2, col: 1 }, null] });
+  room.command(a, { kind: 'lock', round: 1, requestId: 'al' });
+  room.command(b, { kind: 'lock', round: 1, requestId: 'bl' });
+  expect(room.view(a).result).toBe('moved');
+  expect(room.view(a).beats[1]?.result).toBe('waited');
+});
+
+test.each([
+  [{ row: 1, col: 1 }, { row: 1, col: 2 }],
+  [{ row: 1, col: 2 }, { row: 2, col: 2 }],
+  [{ row: 1, col: 1 }, { row: 2, col: 1 }],
+  [{ row: 2, col: 1 }, { row: 2, col: 2 }],
+])('任一绕角格边不透明都隐藏斜角目标 %j %j', (from, to) => {
+  const room = new Room('corner', { board: { ...publicBoard, edges: [{ id: 'wall', a: from, b: to, kind: 'wall' }] }, spawns: [{ row: 1, col: 1 }, { row: 2, col: 2 }] });
+  const a = room.join(); room.join();
+  expect(room.view(a).observation.players).toEqual([]);
+});
+
+test('提交反馈不随未观察到的动态门状态变化', () => {
+  function draft(open: boolean) {
+    const room = new Room('private-feedback', { terrain: { doors: { 'north-door': open } } });
+    const a = room.join(); room.join();
+    const result = room.command(a, { kind: 'plan', round: 1, requestId: 'same', moves: [{ row: 0, col: 3 }] });
+    return { result, view: room.view(a) };
+  }
+  expect(draft(true)).toEqual(draft(false));
 });

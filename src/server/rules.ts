@@ -1,3 +1,4 @@
+import { canTraverse, sameCell, type Terrain } from './board.ts';
 import { roundBeatLimit, type BeatResult, type Board, type Plan, type PlayerId, type PlayerView, type Position } from '../shared/protocol.ts';
 
 export type PlayerState = { id: PlayerId; position: Position; plan: Plan; result: PlayerView['result'] };
@@ -7,12 +8,8 @@ export type CommittedBeat = {
   results: (Omit<BeatResult, 'round'> & { playerId: PlayerId })[];
 };
 
-function sameCell(a: Position, b: Position): boolean {
-  return a.row === b.row && a.col === b.col;
-}
-
-export function* resolveRound({ board, players, stopped = new Set<PlayerId>() }: {
-  board: Board; players: PlayerState[]; stopped?: ReadonlySet<PlayerId>;
+export function* resolveRound({ board, players, terrain = { doors: {} }, stopped = new Set<PlayerId>() }: {
+  board: Board; terrain?: Terrain; players: PlayerState[]; stopped?: ReadonlySet<PlayerId>;
 }): Generator<CommittedBeat> {
   let current: PlayerState[] = players.map((player) => ({ ...player, result: 'waited' }));
   for (let index = 0; index < roundBeatLimit; index++) {
@@ -20,7 +17,7 @@ export function* resolveRound({ board, players, stopped = new Set<PlayerId>() }:
       const target = stopped.has(player.id) ? null : player.plan.moves[index];
       if (!target) return { player, target: player.position, result: 'waited' };
       const distance = Math.max(Math.abs(target.row - player.position.row), Math.abs(target.col - player.position.col));
-      const blocked = distance !== 1 || target.row < 0 || target.col < 0 || target.row >= board.rows || target.col >= board.cols ||
+      const blocked = distance !== 1 || !canTraverse(board, terrain, player.position, target) || target.row < 0 || target.col < 0 || target.row >= board.rows || target.col >= board.cols ||
         current.some((other) => other.id !== player.id && sameCell(other.position, target));
       return { player, target: blocked ? player.position : target, result: blocked ? 'blocked' : 'moved' };
     });

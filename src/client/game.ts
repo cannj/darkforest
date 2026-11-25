@@ -24,6 +24,24 @@ export function mountGame(render: (view: PlayerView) => void) {
     selected.push(move);
     element('selection').textContent = `待提交${planText(selected)}`;
   }
+  function display(snapshot: PlayerView) {
+    const sightings = snapshot.memory.map((sighting) => {
+      const current = snapshot.observation.players.find((p) => p.id === sighting.id);
+      const item = document.createElement('li');
+      item.textContent = current
+        ? `${current.id} · 当前 (${current.position.row}, ${current.position.col})`
+        : `${sighting.id} · 旧目击 (${sighting.position.row}, ${sighting.position.col}) · 第${sighting.round}回合第${sighting.beat}拍`;
+      return item;
+    });
+    const doors = snapshot.terrainMemory.map((door) => {
+      const current = snapshot.observation.doors.some((d) => d.id === door.id);
+      const item = document.createElement('li');
+      item.textContent = `门 ${door.id} · ${door.open ? '开启' : '关闭'} · ${current ? '当前' : `第${door.round}回合第${door.beat}拍记忆`}`;
+      return item;
+    });
+    element('sightings').replaceChildren(...sightings, ...doors);
+    render(snapshot);
+  }
   const roomId = new URL(location.href).searchParams.get('room') ?? 'stone-room';
   element('room-name').textContent = `房间 ${roomId}`;
   const address = new URL('/room', location.href);
@@ -69,7 +87,7 @@ export function mountGame(render: (view: PlayerView) => void) {
     for (const button of buttons) button.disabled = next.plan.kind === 'locked';
     const replay = document.getElementById('replay');
     if (replay instanceof HTMLButtonElement) replay.disabled = next.beats.length === 0;
-    render(next);
+    display(next);
   });
   socket.addEventListener('close', () => {
     element('connection').textContent = '连接已断开';
@@ -102,11 +120,12 @@ export function mountGame(render: (view: PlayerView) => void) {
       const beat = snapshot.beats[index++];
       if (!beat) {
         element('playback').textContent = `播放完成 · 第${snapshot.round - 1}回合`;
-        render(snapshot);
+        display(snapshot);
         return;
       }
       element('playback').textContent = `第${beat.beat}拍 · ${resultLabels[beat.result]}`;
-      render({ ...snapshot, self: { ...snapshot.self, position: beat.to } });
+      const frame = snapshot.playback.find((f) => f.beat === beat.beat);
+      if (frame) display({ ...snapshot, self: { ...snapshot.self, position: frame.self }, observation: frame.observation, memory: frame.memory, terrainMemory: frame.terrainMemory });
       playbackTimer = setTimeout(advance, 500);
     }
     advance();
