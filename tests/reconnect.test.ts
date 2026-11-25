@@ -45,9 +45,21 @@ test('截止竞速命令先超时，结算阶段权威可见且拒绝下一轮�
   now = 1100;
   expect(room.command(a, { kind: 'plan', round: 1, requestId: 'late', moves: [{ row: 1, col: 0 }] }).kind).toBe('rejected');
   expect(room.view(a)).toMatchObject({ phase: 'resolving', deadline: 1120, round: 1, self: { position: { row: 1, col: 1 } } });
+  expect(room.view(a).plan.kind).toBe('locked');
+  expect(room.view(a).beats.every(beat => beat.round === 1)).toBe(true);
   expect(room.command(a, { kind: 'lock', round: 2, requestId: 'early' }).kind).toBe('rejected');
   now = 1120;
   room.tick();
   expect(room.view(a)).toMatchObject({ phase: 'planning', deadline: 1220, round: 2 });
   expect(room.command(a, { kind: 'lock', round: 2, requestId: 'early' }).kind).toBe('accepted');
+});
+
+test('主机时钟大幅前跳只进行有限结算并重新安排未来截止', () => {
+  let now = 0;
+  const room = new Room('clock-jump', {}, { now: () => now, roundDurationMs: 100 });
+  const a = room.join(); room.join();
+  now = 10 ** 12;
+  room.tick();
+  expect(room.view(a).round).toBe(11);
+  expect(room.view(a).deadline).toBe(10 ** 12 + 100);
 });

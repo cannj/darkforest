@@ -51,6 +51,7 @@ export function mountGame(render: (view: PlayerView) => void) {
   const storageKey = `darkforest-seat:${roomId}`;
   let socket: WebSocket;
   let fatal = false;
+  let restoring = true;
   let serverOffset = 0;
   function countdown() {
     if (!view) return;
@@ -62,6 +63,7 @@ export function mountGame(render: (view: PlayerView) => void) {
   }
   setInterval(countdown, 100);
   function connect() {
+    restoring = true;
     const credential = sessionStorage.getItem(storageKey);
     if (credential) address.searchParams.set('resume', credential);
     socket = new WebSocket(address);
@@ -97,11 +99,12 @@ export function mountGame(render: (view: PlayerView) => void) {
       return;
     }
     const next = parsed.data.view;
-    if (view?.round !== next.round) {
-      selected = [];
-      element('selection').textContent = '待提交 · 等待';
+    if (restoring || view?.round !== next.round) {
+      selected = [...next.plan.moves];
+      element('selection').textContent = `待提交${planText(selected)}`;
+      restoring = false;
     }
-    clearTimeout(playbackTimer);
+    if (view?.beats[0]?.round !== next.beats[0]?.round) clearTimeout(playbackTimer);
     view = next;
     serverOffset = next.serverTime - Date.now();
     countdown();
@@ -123,6 +126,7 @@ export function mountGame(render: (view: PlayerView) => void) {
     display(next);
   }
   connect();
+  window.addEventListener('offline', () => socket.close());
   document.querySelectorAll<HTMLButtonElement>('[data-dr]').forEach((button) => {
     button.addEventListener('click', () => {
       if (!view || view.plan.kind === 'locked') return;
@@ -148,8 +152,8 @@ export function mountGame(render: (view: PlayerView) => void) {
     function advance() {
       const beat = snapshot.beats[index++];
       if (!beat) {
-        element('playback').textContent = `播放完成 · 第${snapshot.round - 1}回合`;
-        display(snapshot);
+        element('playback').textContent = `播放完成 · 第${snapshot.beats[0]?.round ?? snapshot.round}回合`;
+        display(view ?? snapshot);
         return;
       }
       element('playback').textContent = `第${beat.beat}拍 · ${resultLabels[beat.result]}`;
