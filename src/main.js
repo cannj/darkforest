@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RenderPixelatedPass } from 'three/addons/postprocessing/RenderPixelatedPass.js';
 import { buildRoom, braziers } from './room.js';
+import { mountGame } from './client/game.ts';
 
 const canvas = document.querySelector('#room');
 const stage = document.querySelector('.stage');
@@ -193,6 +194,30 @@ function start() {
   orbit.saveState();
 
   const animateFire = buildRoom(scene, material);
+  const board = new THREE.Group();
+  const pawn = new THREE.Mesh(new THREE.OctahedronGeometry(0.38), material('ember', 0, { glow: 0.9 }));
+  const pawnBase = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.14, 0.55), material('ember', 0, { glow: 0.52 }));
+  scene.add(board, pawn, pawnBase);
+  let boardVersion;
+  mountGame((view) => {
+    if (boardVersion !== view.board.version) {
+      board.clear();
+      for (let row = 0; row < view.board.rows; row++) {
+        for (let col = 0; col < view.board.cols; col++) {
+          const tile = new THREE.Mesh(new THREE.BoxGeometry(0.94, 0.06, 0.94), material('moss', (row + col) % 2 ? 0.05 : -0.12));
+          tile.position.set(col - 2, 0.12, row - 2);
+          board.add(tile);
+        }
+      }
+      boardVersion = view.board.version;
+    }
+    pawn.position.set(view.self.position.col - 2, 0.65, view.self.position.row - 2);
+    pawnBase.position.set(pawn.position.x, 0.25, pawn.position.z);
+    canvas.dataset.round = String(view.round);
+    canvas.dataset.position = `${view.self.position.row},${view.self.position.col}`;
+    canvas.setAttribute('aria-label', `公开棋盘，自己的棋子位于行 ${view.self.position.row} 列 ${view.self.position.col}。拖动或按方向键旋转视角。`);
+    viewChanged = true;
+  });
   const edges = { normalEdgeStrength: 0.14, depthEdgeStrength: 0.22 };
   // The canvas is already the low-resolution target. CSS scales the completed frame.
   const pass = new RenderPixelatedPass(1, scene, camera, edges);

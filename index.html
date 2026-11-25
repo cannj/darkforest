@@ -24,6 +24,40 @@
         <span>320 × 192 · 最近邻放大</span>
         <span>拖动旋转</span>
       </footer>
+      <section id="game" aria-label="联机对局">
+        <div class="game-status">
+          <strong id="room-name"></strong><span id="seat" data-testid="seat">等待座位</span>
+          <span id="round" data-testid="round">连接中</span>
+          <span id="connection" role="status">正在连接房间</span>
+        </div>
+        <div class="game-status">
+          <span id="board-summary" data-testid="board-summary"></span>
+          <span id="position" data-testid="position"></span>
+          <span id="result" data-testid="result"></span>
+        </div>
+        <p>选择一步移动或等待，提交后锁定。双方锁定后统一结算。行号向南增加，列号向东增加。</p>
+        <div class="plan-controls">
+          <div class="directions" aria-label="移动方向">
+            <button data-dr="-1" data-dc="-1" disabled>西北 ↖</button>
+            <button data-dr="-1" data-dc="0" disabled>北 ↑</button>
+            <button data-dr="-1" data-dc="1" disabled>东北 ↗</button>
+            <button data-dr="0" data-dc="-1" disabled>西 ←</button>
+            <button id="wait" disabled>等待</button>
+            <button data-dr="0" data-dc="1" disabled>东 →</button>
+            <button data-dr="1" data-dc="-1" disabled>西南 ↙</button>
+            <button data-dr="1" data-dc="0" disabled>南 ↓</button>
+            <button data-dr="1" data-dc="1" disabled>东南 ↘</button>
+          </div>
+          <div class="plan-summary">
+            <span id="selection">待提交 · 等待</span>
+            <span id="plan" data-testid="plan">草稿 · 等待</span>
+            <div class="controls">
+              <button id="submit-plan" disabled>提交计划</button>
+              <button id="lock-plan" disabled>锁定计划</button>
+            </div>
+          </div>
+        </div>
+      </section>
     </main>
     <script type="module" src="/src/main.js"></script>
   </body>
