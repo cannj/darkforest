@@ -7,6 +7,7 @@
     "build": "npm run typecheck && vite build && tsc",
     "typecheck": "tsc --noEmit",
     "server": "node --experimental-strip-types src/server/index.ts",
+    "replay": "node --experimental-strip-types src/server/replay-cli.ts",
     "test": "vitest run",
     "test:e2e": "playwright test"
   },

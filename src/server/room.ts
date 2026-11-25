@@ -1,8 +1,9 @@
-import { commandSchema, roomIdSchema, type CommandResult, type PlayerId, type Observation, type Playback, type Sighting, type TerrainMemory, type PlayerView } from '../shared/protocol.ts';
+import { commandSchema, movementLimit, roundBeatLimit, roomIdSchema, type CommandResult, type PlayerId, type Observation, type Playback, type Sighting, type TerrainMemory, type PlayerView } from '../shared/protocol.ts';
+import { configVersion, digest, rulesVersion, type MatchRecord, type RoundInput } from './recording.ts';
 import { canSee, roomSetupSchema, type RoomSetup } from './board.ts';
 import { resolveRound, type CommittedBeat, type PlayerState } from './rules.ts';
 
-export type RoomRuntime = { now?: () => number; roundDurationMs?: number; settlementDurationMs?: number };
+export type RoomRuntime = { now?: () => number; roundDurationMs?: number; settlementDurationMs?: number; record?: (entry: MatchRecord) => void };
 
 export class Room {
   readonly id: string;
@@ -24,9 +25,11 @@ export class Room {
   private readonly now: () => number;
   private readonly roundDurationMs: number;
   private readonly settlementDurationMs: number;
+  private readonly record: (entry: MatchRecord) => void;
 
   constructor(id: string, setup: unknown = {}, runtime: RoomRuntime = {}) {
     this.now = runtime.now ?? Date.now;
+    this.record = runtime.record ?? (() => {});
     this.roundDurationMs = runtime.roundDurationMs ?? 30_000;
     this.settlementDurationMs = runtime.settlementDurationMs ?? 0;
     if (!Number.isFinite(this.roundDurationMs) || this.roundDurationMs <= 0 ||
@@ -42,6 +45,8 @@ export class Room {
     this.players.push({ id, position, plan: { kind: 'draft', moves: [] }, result: 'none' });
     for (const player of this.players) this.capture(player.id, 0);
     if (this.players.length === this.setup.spawns.length) {
+      this.record(structuredClone({ kind: 'header', format: 1, roomId: this.id, rulesVersion, configVersion,
+        setup: this.setup, movementLimit, roundBeatLimit, initialSeats: this.players.map(({ id, position }) => ({ id, position })) }));
       this.phase = 'planning';
       this.deadline = this.now() + this.roundDurationMs;
     }
@@ -78,8 +83,6 @@ export class Room {
       if (this.phase === 'resolving') {
         this.startNextRound(boundary);
       } else {
-        this.players = this.players.map((player) => player.plan.kind === 'locked' ? player :
-          { ...player, plan: { kind: 'locked', moves: [] } });
         this.settle(boundary);
       }
       changed = true;
@@ -91,6 +94,11 @@ export class Room {
   }
 
   private settle(at: number) {
+    const inputs = this.players.map<RoundInput>(player => player.plan.kind === 'locked'
+      ? { playerId: player.id, source: 'locked', moves: player.plan.moves }
+      : { playerId: player.id, source: 'timeout', moves: [] });
+    this.players = this.players.map(player => player.plan.kind === 'locked' ? player :
+      { ...player, plan: { kind: 'locked', moves: [] } });
     this.beats = [];
     this.playback.clear();
     const stopped = new Set<PlayerId>();
@@ -107,6 +115,13 @@ export class Room {
       }
     }
     this.settledRound = this.round;
+    this.record({ kind: 'round', round: this.round, inputs,
+      authority: digest({ players: this.players, terrain: this.setup.terrain, beats: this.beats, contacts: [...this.contacts].sort(), confrontations: this.confrontations }),
+      observations: this.players.map(({ id }) => ({ playerId: id, digest: digest({
+        playback: this.playback.get(id), memory: this.memories.get(id), terrainMemory: this.terrainMemories.get(id),
+        observation: this.observe(id), confrontations: this.view(id).confrontations,
+      }) })),
+    });
     this.phase = 'resolving';
     this.deadline = at + this.settlementDurationMs;
     if (this.settlementDurationMs === 0) this.startNextRound(at);
