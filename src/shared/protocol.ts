@@ -5,13 +5,35 @@ export const playerIdSchema = z.enum(['p1', 'p2']);
 export type PlayerId = z.infer<typeof playerIdSchema>;
 export const positionSchema = z.object({ row: z.int().nonnegative(), col: z.int().nonnegative() }).strict();
 export type Position = z.infer<typeof positionSchema>;
-export const boardSchema = z.object({
-  version: z.literal('stone-room-v1'),
-  rows: z.int().positive(),
-  cols: z.int().positive(),
+export const cellSchema = positionSchema.extend({ terrain: z.enum(['stone', 'moss']) }).strict();
+export const edgeSchema = z.object({
+  id: z.string().min(1), a: positionSchema, b: positionSchema,
+  kind: z.enum(['wall', 'door', 'window']),
 }).strict();
+export const boardSchema = z.object({
+  version: z.string().min(1), rows: z.int().positive(), cols: z.int().positive(),
+  cells: z.array(cellSchema), edges: z.array(edgeSchema),
+}).strict().superRefine((board, ctx) => {
+  const key = (p: Position) => `${p.row},${p.col}`;
+  const inside = (p: Position) => p.row < board.rows && p.col < board.cols;
+  const cells = new Set(board.cells.map(key));
+  const edges = new Set(board.edges.map((e) => [key(e.a), key(e.b)].sort().join(':')));
+  if (cells.size !== board.rows * board.cols || board.cells.length !== cells.size || board.cells.some((c) => !inside(c)))
+    ctx.addIssue({ code: 'custom', message: '地图必须完整且不重复地声明格子' });
+  if (edges.size !== board.edges.length || new Set(board.edges.map((e) => e.id)).size !== board.edges.length ||
+      board.edges.some((e) => !inside(e.a) || !inside(e.b) || Math.abs(e.a.row - e.b.row) + Math.abs(e.a.col - e.b.col) !== 1))
+    ctx.addIssue({ code: 'custom', message: '格边必须唯一且连接界内正交相邻格' });
+});
 export type Board = z.infer<typeof boardSchema>;
-export const publicBoard: Board = { version: 'stone-room-v1', rows: 5, cols: 5 };
+export const publicBoard: Board = boardSchema.parse({
+  version: 'stone-room-v1', rows: 5, cols: 5,
+  cells: Array.from({ length: 25 }, (_, i) => ({ row: Math.floor(i / 5), col: i % 5, terrain: i % 3 ? 'stone' : 'moss' })),
+  edges: [
+    { id: 'west-wall', a: { row: 4, col: 0 }, b: { row: 4, col: 1 }, kind: 'wall' },
+    { id: 'north-door', a: { row: 0, col: 3 }, b: { row: 1, col: 3 }, kind: 'door' },
+    { id: 'east-window', a: { row: 2, col: 3 }, b: { row: 2, col: 4 }, kind: 'window' },
+  ],
+});
 
 export const movementLimit = 2;
 export const roundBeatLimit = 4;
@@ -34,6 +56,21 @@ export const planSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('locked'), moves: movesSchema }).strict(),
 ]);
 export type Plan = z.infer<typeof planSchema>;
+export const observedPlayerSchema = z.object({ id: playerIdSchema, position: positionSchema }).strict();
+export const observationSchema = z.object({
+  cells: z.array(positionSchema), players: z.array(observedPlayerSchema),
+  doors: z.array(z.object({ id: z.string(), open: z.boolean() }).strict()),
+}).strict();
+export type Observation = z.infer<typeof observationSchema>;
+export const sightingSchema = observedPlayerSchema.extend({ round: z.int().positive(), beat: z.int().nonnegative() }).strict();
+export type Sighting = z.infer<typeof sightingSchema>;
+export const terrainMemorySchema = z.object({ id: z.string(), open: z.boolean(), round: z.int().positive(), beat: z.int().nonnegative() }).strict();
+export type TerrainMemory = z.infer<typeof terrainMemorySchema>;
+export const playbackSchema = z.object({
+  round: z.int().positive(), beat: z.int().positive(), self: positionSchema,
+  observation: observationSchema, memory: z.array(sightingSchema), terrainMemory: z.array(terrainMemorySchema),
+}).strict();
+export type Playback = z.infer<typeof playbackSchema>;
 export const playerViewSchema = z.object({
   roomId: roomIdSchema,
   board: boardSchema,
@@ -44,6 +81,7 @@ export const playerViewSchema = z.object({
   plan: planSchema,
   result: z.enum(['none', 'moved', 'blocked', 'waited']),
   beats: z.array(beatResultSchema),
+  observation: observationSchema, memory: z.array(sightingSchema), terrainMemory: z.array(terrainMemorySchema), playback: z.array(playbackSchema),
 }).strict();
 export type PlayerView = z.infer<typeof playerViewSchema>;
 export const serverMessageSchema = z.discriminatedUnion('kind', [
