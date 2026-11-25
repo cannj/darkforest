@@ -1,7 +1,38 @@
-import { expect, test } from 'vitest';
+import { mkdtempSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { expect, test, vi } from 'vitest';
 import { Room } from '../src/server/room.ts';
 import { replay } from '../src/server/replay.ts';
-import type { MatchRecord } from '../src/server/recording.ts';
+import { createRecorder, type MatchRecord } from '../src/server/recording.ts';
+
+test.each(['start', 'append'])('录像文件系统在 %s 不可写时房间仍可持续结算且仅诊断一次', (failure) => {
+  const directory = mkdtempSync(join(tmpdir(), 'darkforest-recorder-'));
+  const sink = join(directory, 'sink');
+  const diagnostic = vi.spyOn(console, 'error').mockImplementation(() => {});
+  try {
+    if (failure === 'start') writeFileSync(sink, 'regular file');
+    const room = new Room('failed-sink', {}, { record: createRecorder(sink, 'failed-sink') });
+    const a = room.join(); const b = room.join();
+    if (failure === 'append') {
+      const filename = readdirSync(sink)[0];
+      if (!filename) throw new Error('missing recording header');
+      const file = join(sink, filename);
+      rmSync(file);
+      mkdirSync(file);
+    }
+    for (const round of [1, 2]) {
+      room.command(a, { kind: 'lock', round, requestId: 'a' });
+      room.command(b, { kind: 'lock', round, requestId: 'b' });
+      expect(room.view(a)).toMatchObject({ round: round + 1, phase: 'planning' });
+    }
+    expect(diagnostic).toHaveBeenCalledTimes(1);
+    expect(diagnostic).toHaveBeenCalledWith(expect.objectContaining({ event: 'match-recording-disabled', roomId: 'failed-sink' }));
+  } finally {
+    diagnostic.mockRestore();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
 
 test('实际房间记录可重跑对峙与超时补等待，并拒绝改写结果', () => {
   let now = 0;

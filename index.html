@@ -51,6 +51,11 @@
             <button data-dr="1" data-dc="1" disabled>东南 ↘</button>
           </div>
           <div class="plan-summary">
+            <label for="direction-origin">方向起点</label>
+            <select id="direction-origin" disabled>
+              <option value="planned">上一移动目标（默认）</option>
+              <option value="current">本轮当前位置</option>
+            </select>
             <span id="selection">待提交 · 等待</span>
             <span id="plan" data-testid="plan">草稿 · 等待</span>
             <div class="controls">

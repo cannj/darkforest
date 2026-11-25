@@ -1,7 +1,8 @@
-import { commandSchema, movementLimit, roundBeatLimit, roomIdSchema, type CommandResult, type PlayerId, type Observation, type Playback, type Sighting, type TerrainMemory, type PlayerView } from '../shared/protocol.ts';
-import { configVersion, digest, rulesVersion, type MatchRecord, type RoundInput } from './recording.ts';
-import { canSee, roomSetupSchema, type RoomSetup } from './board.ts';
-import { resolveRound, type CommittedBeat, type PlayerState } from './rules.ts';
+import { commandSchema, movementLimit, roundBeatLimit, roomIdSchema, type CommandResult, type PlayerId, type PlayerView } from '../shared/protocol.ts';
+import { configVersion, digest, isolateRecordingFailure, rulesVersion, type MatchRecord, type RoundInput } from './recording.ts';
+import { roomSetupSchema, type RoomSetup } from './board.ts';
+import { PlayerViews } from './player-view.ts';
+import { resolveRound, type CommittedBeat, type Confrontation, type PlayerState } from './rules.ts';
 
 export type RoomRuntime = { now?: () => number; roundDurationMs?: number; settlementDurationMs?: number; record?: (entry: MatchRecord) => void };
 
@@ -11,13 +12,11 @@ export class Room {
   private settledRound = 0;
   private players: PlayerState[] = [];
   private beats: CommittedBeat[] = [];
-  private confrontations: { participants: [PlayerId, PlayerId]; round: number; beat: number }[] = [];
+  private confrontations: Confrontation[] = [];
   private contacts = new Set<string>();
 
   private readonly setup: RoomSetup;
-  private memories = new Map<PlayerId, Sighting[]>();
-  private terrainMemories = new Map<PlayerId, TerrainMemory[]>();
-  private playback = new Map<PlayerId, Playback[]>();
+  private readonly views = new PlayerViews();
 
   private phase: 'waiting' | 'planning' | 'resolving' = 'waiting';
   private deadline: number | null = null;
@@ -29,7 +28,7 @@ export class Room {
 
   constructor(id: string, setup: unknown = {}, runtime: RoomRuntime = {}) {
     this.now = runtime.now ?? Date.now;
-    this.record = runtime.record ?? (() => {});
+    this.record = isolateRecordingFailure(id, runtime.record ?? (() => {}));
     this.roundDurationMs = runtime.roundDurationMs ?? 30_000;
     this.settlementDurationMs = runtime.settlementDurationMs ?? 0;
     if (!Number.isFinite(this.roundDurationMs) || this.roundDurationMs <= 0 ||
@@ -43,7 +42,7 @@ export class Room {
     if (!position) throw new Error('房间已满');
     const id = this.players.length === 0 ? 'p1' : this.players.length === 1 ? 'p2' : 'p3';
     this.players.push({ id, position, plan: { kind: 'draft', moves: [] }, result: 'none' });
-    for (const player of this.players) this.capture(player.id, 0);
+    for (const player of this.players) this.views.capture(player.id, { setup: this.setup, players: this.players, round: this.round }, 0);
     if (this.players.length === this.setup.spawns.length) {
       this.record(structuredClone({ kind: 'header', format: 1, roomId: this.id, rulesVersion, configVersion,
         setup: this.setup, movementLimit, roundBeatLimit, initialSeats: this.players.map(({ id, position }) => ({ id, position })) }));
@@ -100,27 +99,23 @@ export class Room {
     this.players = this.players.map(player => player.plan.kind === 'locked' ? player :
       { ...player, plan: { kind: 'locked', moves: [] } });
     this.beats = [];
-    this.playback.clear();
-    const stopped = new Set<PlayerId>();
-    this.detectConfrontations(0, stopped);
-    for (const beat of resolveRound({ board: this.setup.board, terrain: this.setup.terrain, players: this.players, stopped })) {
-      this.players = beat.players;
-      this.detectConfrontations(beat.beat, stopped);
-      this.beats.push(beat);
-      for (const player of this.players) {
-        const observation = this.capture(player.id, beat.beat);
-        const frames = this.playback.get(player.id) ?? [];
-        frames.push(structuredClone({ round: this.round, beat: beat.beat, self: player.position, observation, memory: this.memories.get(player.id) ?? [], terrainMemory: this.terrainMemories.get(player.id) ?? [] }));
-        this.playback.set(player.id, frames);
-      }
+    this.views.startSettlement();
+    for (const outcome of resolveRound({ setup: this.setup, players: this.players, round: this.round,
+      previous: { contacts: this.contacts, confrontations: this.confrontations } })) {
+      this.players = outcome.players;
+      this.contacts = outcome.contacts;
+      this.confrontations = outcome.confrontations;
+      this.beats.push({ beat: outcome.beat, players: outcome.players, results: outcome.results });
+      this.views.captureBeat({ setup: this.setup, players: this.players, round: this.round }, outcome.beat);
     }
     this.settledRound = this.round;
     this.record({ kind: 'round', round: this.round, inputs,
       authority: digest({ players: this.players, terrain: this.setup.terrain, beats: this.beats, contacts: [...this.contacts].sort(), confrontations: this.confrontations }),
-      observations: this.players.map(({ id }) => ({ playerId: id, digest: digest({
-        playback: this.playback.get(id), memory: this.memories.get(id), terrainMemory: this.terrainMemories.get(id),
-        observation: this.observe(id), confrontations: this.view(id).confrontations,
-      }) })),
+      observations: this.players.map(({ id }) => {
+        const view = this.view(id);
+        return { playerId: id, digest: digest({ playback: view.playback, memory: view.memory,
+          terrainMemory: view.terrainMemory, observation: view.observation, confrontations: view.confrontations }) };
+      }),
     });
     this.phase = 'resolving';
     this.deadline = at + this.settlementDurationMs;
@@ -136,68 +131,9 @@ export class Room {
   }
 
   view(identity: PlayerId): PlayerView {
-    const player = this.player(identity);
-    return structuredClone({
-      roomId: this.id, board: this.setup.board, round: this.round, phase: this.phase, deadline: this.deadline, serverTime: this.now(), seats: this.players.length,
-      confrontations: this.confrontations.filter((entry) => entry.participants.includes(identity)).map(({ participants, round, beat }) => ({ opponent: participants[0] === identity ? participants[1] : participants[0], round, beat })),
-      self: { id: player.id, position: player.position }, plan: player.plan, result: this.beats.flatMap((beat) => beat.results).findLast((r) => r.playerId === identity && r.result !== 'waited')?.result ?? player.result,
-      terrainMemory: this.terrainMemories.get(identity) ?? [],
-      observation: this.observe(identity), memory: this.memories.get(identity) ?? [], playback: this.playback.get(identity) ?? [],
-      beats: this.beats.flatMap((beat) => beat.results.filter((result) => result.playerId === identity)
-        .map(({ playerId, ...result }) => ({ round: this.settledRound, ...result }))),
-    });
-  }
-
-  private detectConfrontations(beat: number, stopped: Set<PlayerId>): void {
-    const contacts = new Set<string>();
-    for (const [index, first] of this.players.entries()) {
-      for (const second of this.players.slice(index + 1)) {
-        if (!canSee(this.setup.board, this.setup.terrain, first.position, second.position, this.setup.visionRange) ||
-            !canSee(this.setup.board, this.setup.terrain, second.position, first.position, this.setup.visionRange)) continue;
-        const key = `${first.id}:${second.id}`;
-        contacts.add(key);
-        if (this.contacts.has(key)) continue;
-        stopped.add(first.id);
-        stopped.add(second.id);
-        const relation = this.confrontations.find((entry) => entry.participants[0] === first.id && entry.participants[1] === second.id);
-        if (relation) Object.assign(relation, { round: this.round, beat });
-        else this.confrontations.push({ participants: [first.id, second.id], round: this.round, beat });
-      }
-    }
-    this.contacts = contacts;
-  }
-
-  private observe(identity: PlayerId): Observation {
-    const self = this.player(identity);
-    const cells = this.setup.board.cells.filter((cell) => canSee(this.setup.board, this.setup.terrain, self.position, cell, this.setup.visionRange))
-      .map(({ row, col }) => ({ row, col }));
-    const visible = (p: { row: number; col: number }) => cells.some((c) => c.row === p.row && c.col === p.col);
-    return {
-      cells, players: this.players.filter((p) => p.id !== identity && visible(p.position)).map(({ id, position }) => ({ id, position })),
-      doors: this.setup.board.edges.filter((e) => e.kind === 'door' && (visible(e.a) || visible(e.b)))
-        .map((e) => ({ id: e.id, open: this.setup.terrain.doors[e.id] === true })),
-    };
-  }
-
-  private capture(identity: PlayerId, beat: number): Observation {
-    const observation = this.observe(identity);
-    const memories = this.memories.get(identity) ?? [];
-    for (const player of observation.players) {
-      const previous = memories.findIndex((s) => s.id === player.id);
-      const sighting = { ...player, round: this.round, beat };
-      if (previous < 0) memories.push(sighting);
-      else memories[previous] = sighting;
-    }
-    this.memories.set(identity, memories);
-    const terrainMemory = this.terrainMemories.get(identity) ?? [];
-    for (const door of observation.doors) {
-      const previous = terrainMemory.findIndex((d) => d.id === door.id);
-      const memory = { ...door, round: this.round, beat };
-      if (previous < 0) terrainMemory.push(memory);
-      else terrainMemory[previous] = memory;
-    }
-    this.terrainMemories.set(identity, terrainMemory);
-    return observation;
+    return this.views.project(identity, { setup: this.setup, players: this.players, round: this.round,
+      roomId: this.id, phase: this.phase, deadline: this.deadline, serverTime: this.now(),
+      beats: this.beats, settledRound: this.settledRound, confrontations: this.confrontations });
   }
 
   private player(identity: PlayerId): PlayerState {

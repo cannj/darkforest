@@ -151,3 +151,36 @@ test('短暂目击只出现在获准的拍，画面区分当前棋子和带时�
   await first.screenshot({ path: 'artifacts/fog-memory.png', fullPage: true });
   await a.close(); await b.close();
 });
+
+
+test('闭门受阻后可从本轮当前位置规划第二拍并按原拍数移动', async ({ browser }) => {
+  const a = await browser.newContext(); const b = await browser.newContext();
+  const first = await a.newPage(); const second = await b.newPage();
+  try {
+    const url = `http://127.0.0.1:5174/?room=fallback-${Date.now()}`;
+    await first.goto(url); await second.goto(url);
+    await expect(second.getByTestId('seat')).toHaveText('座位 p2');
+    await first.getByRole('button', { name: '东 →', exact: true }).click();
+    await first.getByRole('button', { name: '东 →', exact: true }).click();
+    await first.getByRole('button', { name: '提交计划', exact: true }).click();
+    await expect(first.getByTestId('plan')).toContainText('第2拍 → (1, 3)');
+    await first.getByRole('button', { name: '锁定计划', exact: true }).click();
+    await second.getByRole('button', { name: '锁定计划', exact: true }).click();
+    await expect(first.getByTestId('round')).toHaveText('第 2 回合 · 计划阶段');
+    await expect(first.getByTestId('position')).toHaveText('当前位置 (1, 3)');
+    await first.getByRole('button', { name: '北 ↑', exact: true }).click();
+    await first.getByLabel('方向起点').selectOption('current', { timeout: 2000 });
+    await first.getByRole('button', { name: '南 ↓', exact: true }).click();
+    await first.getByRole('button', { name: '提交计划', exact: true }).click();
+    await expect(first.getByTestId('plan')).toHaveText('草稿第1拍 → (0, 3) / 第2拍 → (2, 3)');
+    await first.getByRole('button', { name: '锁定计划', exact: true }).click();
+    await second.getByRole('button', { name: '锁定计划', exact: true }).click();
+    await expect(first.getByTestId('round')).toHaveText('第 3 回合 · 计划阶段');
+    await expect(first.getByTestId('beat-results')).toContainText('第1拍 · 移动受阻 · (1, 3) → (1, 3)');
+    await expect(first.getByTestId('beat-results')).toContainText('第2拍 · 移动成功 · (1, 3) → (2, 3)');
+    await expect(first.getByTestId('position')).toHaveText('当前位置 (2, 3)');
+    await first.screenshot({ path: 'artifacts/blocked-then-moved.png', fullPage: true });
+  } finally {
+    await a.close(); await b.close();
+  }
+});

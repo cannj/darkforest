@@ -5,6 +5,23 @@ import { Room } from '../src/server/room.js';
 beforeEach(() => vi.useFakeTimers({ now: 0 }));
 afterEach(() => vi.useRealTimers());
 
+test.each(['header', 'round'])('录像 %s 写入失败后仍能开始和完成后续回合', (failure) => {
+  const room = new Room('broken-recording', {}, { record: entry => {
+    if (entry.kind === failure) throw new Error('unavailable sink');
+  } });
+  const a = room.join();
+  const b = room.join();
+  expect(room.view(a)).toMatchObject({ phase: 'planning', deadline: 30_000 });
+  for (const round of [1, 2]) {
+    room.command(a, { kind: 'lock', round, requestId: 'a' });
+    room.command(b, { kind: 'lock', round, requestId: 'b' });
+    expect(room.view(a)).toMatchObject({ round: round + 1, phase: 'planning', deadline: 30_000 });
+  }
+  vi.advanceTimersByTime(30_000);
+  expect(room.tick()).toBe(true);
+  expect(room.view(b)).toMatchObject({ round: 4, phase: 'planning', deadline: 60_000 });
+});
+
 test('两名玩家秘密锁定单步计划后共同进入下一回合', () => {
   const room = new Room('first-round');
   const a = room.join();

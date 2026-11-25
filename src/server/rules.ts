@@ -1,4 +1,4 @@
-import { canTraverse, sameCell, type Terrain } from './board.ts';
+import { canSee, canTraverse, sameCell, type RoomSetup, type Terrain } from './board.ts';
 import { roundBeatLimit, type BeatResult, type Board, type Plan, type PlayerId, type PlayerView, type Position } from '../shared/protocol.ts';
 
 export type PlayerState = { id: PlayerId; position: Position; plan: Plan; result: PlayerView['result'] };
@@ -8,7 +8,7 @@ export type CommittedBeat = {
   results: (Omit<BeatResult, 'round'> & { playerId: PlayerId })[];
 };
 
-export function* resolveRound({ board, players, terrain = { doors: {} }, stopped = new Set<PlayerId>() }: {
+function* resolveMovement({ board, players, terrain = { doors: {} }, stopped = new Set<PlayerId>() }: {
   board: Board; terrain?: Terrain; players: PlayerState[]; stopped?: ReadonlySet<PlayerId>;
 }): Generator<CommittedBeat> {
   let current: PlayerState[] = players.map((player) => ({ ...player, result: 'waited' }));
@@ -32,5 +32,43 @@ export function* resolveRound({ board, players, terrain = { doors: {} }, stopped
       ...player, position: to, result: index < player.plan.moves.length ? result : player.result,
     }));
     yield { beat: index + 1, players: current, results: resolutions.map(({ player, ...result }) => result) };
+  }
+}
+
+export type Confrontation = { participants: [PlayerId, PlayerId]; round: number; beat: number };
+export type RoundState = { contacts: Set<string>; confrontations: Confrontation[] };
+export type RoundOutcome = CommittedBeat & RoundState;
+
+export function* resolveRound({ setup, players, round, previous }: {
+  setup: RoomSetup; players: PlayerState[]; round: number; previous: RoundState;
+}): Generator<RoundOutcome> {
+  let current = players;
+  let contacts = new Set(previous.contacts);
+  const confrontations = structuredClone(previous.confrontations);
+  const stopped = new Set<PlayerId>();
+  function detectConfrontations(beat: number): void {
+    const nextContacts = new Set<string>();
+    for (const [index, first] of current.entries()) {
+      for (const second of current.slice(index + 1)) {
+        if (!canSee(setup.board, setup.terrain, first.position, second.position, setup.visionRange) ||
+            !canSee(setup.board, setup.terrain, second.position, first.position, setup.visionRange)) continue;
+        const key = `${first.id}:${second.id}`;
+        nextContacts.add(key);
+        if (contacts.has(key)) continue;
+        stopped.add(first.id);
+        stopped.add(second.id);
+        const relation = confrontations.find((entry) => entry.participants[0] === first.id && entry.participants[1] === second.id);
+        if (relation) Object.assign(relation, { round, beat });
+        else confrontations.push({ participants: [first.id, second.id], round, beat });
+      }
+    }
+    contacts = nextContacts;
+  }
+
+  detectConfrontations(0);
+  for (const beat of resolveMovement({ board: setup.board, terrain: setup.terrain, players, stopped })) {
+    current = beat.players;
+    detectConfrontations(beat.beat);
+    yield { ...beat, contacts: new Set(contacts), confrontations: structuredClone(confrontations) };
   }
 }

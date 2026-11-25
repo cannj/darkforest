@@ -6,9 +6,16 @@ function element(id: string): HTMLElement {
   return target;
 }
 
+function selectElement(id: string): HTMLSelectElement {
+  const target = element(id);
+  if (!(target instanceof HTMLSelectElement)) throw new Error(`Missing selector ${id}`);
+  return target;
+}
+
 export function mountGame(render: (view: PlayerView) => void) {
   let view: PlayerView | undefined;
   let selected: (Position | null)[] = [];
+  const directionOrigin = selectElement('direction-origin');
   let playbackTimer: ReturnType<typeof setTimeout> | undefined;
   const resultLabels = { moved: '移动成功', blocked: '移动受阻', waited: '等待' };
   function planText(moves: (Position | null)[]) {
@@ -76,7 +83,7 @@ export function mountGame(render: (view: PlayerView) => void) {
     });
     socket.addEventListener('error', () => { element('connection').textContent = '连接失败 · 正在重连'; });
   }
-  const buttons = document.querySelectorAll<HTMLButtonElement>('#game button');
+  const buttons = document.querySelectorAll<HTMLButtonElement | HTMLSelectElement>('#game button, #game select');
   function send(command: Command) {
     if (socket.readyState !== WebSocket.OPEN || view?.phase === 'resolving') return;
     socket.send(JSON.stringify(command));
@@ -101,6 +108,7 @@ export function mountGame(render: (view: PlayerView) => void) {
     const next = parsed.data.view;
     if (restoring || view?.round !== next.round) {
       selected = [...next.plan.moves];
+      directionOrigin.value = 'planned';
       element('selection').textContent = `待提交${planText(selected)}`;
       restoring = false;
     }
@@ -130,7 +138,8 @@ export function mountGame(render: (view: PlayerView) => void) {
   document.querySelectorAll<HTMLButtonElement>('[data-dr]').forEach((button) => {
     button.addEventListener('click', () => {
       if (!view || view.plan.kind === 'locked') return;
-      const origin = selected.findLast((move) => move !== null) ?? view.self.position;
+      const origin = directionOrigin.value === 'current' ? view.self.position :
+        selected.findLast((move) => move !== null) ?? view.self.position;
       const position = { row: origin.row + Number(button.dataset.dr), col: origin.col + Number(button.dataset.dc) };
       if (position.row < 0 || position.col < 0 || position.row >= view.board.rows || position.col >= view.board.cols) {
         element('selection').textContent = '目标超出棋盘，请重新选择';
@@ -142,6 +151,7 @@ export function mountGame(render: (view: PlayerView) => void) {
   element('wait').addEventListener('click', () => select(null));
   element('clear-plan').addEventListener('click', () => {
     selected = [];
+    directionOrigin.value = 'planned';
     element('selection').textContent = '待提交 · 等待';
   });
   element('replay').addEventListener('click', () => {
