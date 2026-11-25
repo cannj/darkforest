@@ -1,4 +1,4 @@
-import { serverMessageSchema, type Command, type PlayerView, type Position } from '../shared/protocol.js';
+import { movementLimit, roundBeatLimit, serverMessageSchema, type Command, type PlayerView, type Position } from '../shared/protocol.js';
 
 function element(id: string): HTMLElement {
   const target = document.getElementById(id);
@@ -8,7 +8,22 @@ function element(id: string): HTMLElement {
 
 export function mountGame(render: (view: PlayerView) => void) {
   let view: PlayerView | undefined;
-  let selected: Position | undefined;
+  let selected: (Position | null)[] = [];
+  let playbackTimer: ReturnType<typeof setTimeout> | undefined;
+  const resultLabels = { moved: '移动成功', blocked: '移动受阻', waited: '等待' };
+  function planText(moves: (Position | null)[]) {
+    if (moves.length === 0) return ' · 等待';
+    if (moves.length === 1 && moves[0]) return ` → (${moves[0].row}, ${moves[0].col})`;
+    return moves.map((move, i) => `第${i + 1}拍${move ? ` → (${move.row}, ${move.col})` : ' · 等待'}`).join(' / ');
+  }
+  function select(move: Position | null) {
+    if (selected.length >= roundBeatLimit || (move && selected.filter(Boolean).length >= movementLimit)) {
+      element('selection').textContent = '每轮最多两次移动、四拍。请清空重排';
+      return;
+    }
+    selected.push(move);
+    element('selection').textContent = `待提交${planText(selected)}`;
+  }
   const roomId = new URL(location.href).searchParams.get('room') ?? 'stone-room';
   element('room-name').textContent = `房间 ${roomId}`;
   const address = new URL('/room', location.href);
@@ -34,19 +49,26 @@ export function mountGame(render: (view: PlayerView) => void) {
     }
     const next = parsed.data.view;
     if (view?.round !== next.round) {
-      selected = undefined;
+      selected = [];
       element('selection').textContent = '待提交 · 等待';
     }
+    clearTimeout(playbackTimer);
     view = next;
     element('connection').textContent = next.seats < 2 ? '已连接 · 等待另一名玩家' : '两名玩家已入座';
     element('seat').textContent = `座位 ${next.self.id}`;
     element('round').textContent = `第 ${next.round} 回合 · 计划阶段`;
     element('board-summary').textContent = `公开地图 ${next.board.rows} × ${next.board.cols}`;
     element('position').textContent = `当前位置 (${next.self.position.row}, ${next.self.position.col})`;
-    const target = next.plan.moves[0];
-    element('plan').textContent = `${next.plan.kind === 'locked' ? '已锁定' : '草稿'}${target ? ` → (${target.row}, ${target.col})` : ' · 等待'}`;
+    element('plan').textContent = `${next.plan.kind === 'locked' ? '已锁定' : '草稿'}${planText(next.plan.moves)}`;
+    element('beat-results').replaceChildren(...next.beats.map((beat) => {
+      const item = document.createElement('li');
+      item.textContent = `第${beat.beat}拍 · ${resultLabels[beat.result]} · (${beat.from.row}, ${beat.from.col}) → (${beat.to.row}, ${beat.to.col})`;
+      return item;
+    }));
     element('result').textContent = { none: '选择方向，提交后锁定计划', moved: '上轮移动成功', blocked: '上轮移动受阻', waited: '上轮等待' }[next.result];
     for (const button of buttons) button.disabled = next.plan.kind === 'locked';
+    const replay = document.getElementById('replay');
+    if (replay instanceof HTMLButtonElement) replay.disabled = next.beats.length === 0;
     render(next);
   });
   socket.addEventListener('close', () => {
@@ -57,22 +79,40 @@ export function mountGame(render: (view: PlayerView) => void) {
   document.querySelectorAll<HTMLButtonElement>('[data-dr]').forEach((button) => {
     button.addEventListener('click', () => {
       if (!view || view.plan.kind === 'locked') return;
-      const position = { row: view.self.position.row + Number(button.dataset.dr), col: view.self.position.col + Number(button.dataset.dc) };
+      const origin = selected.findLast((move) => move !== null) ?? view.self.position;
+      const position = { row: origin.row + Number(button.dataset.dr), col: origin.col + Number(button.dataset.dc) };
       if (position.row < 0 || position.col < 0 || position.row >= view.board.rows || position.col >= view.board.cols) {
         element('selection').textContent = '目标超出棋盘，请重新选择';
-        selected = undefined;
         return;
       }
-      selected = position;
-      element('selection').textContent = `待提交 → (${position.row}, ${position.col})`;
+      select(position);
     });
   });
-  element('wait').addEventListener('click', () => {
-    selected = undefined;
+  element('wait').addEventListener('click', () => select(null));
+  element('clear-plan').addEventListener('click', () => {
+    selected = [];
     element('selection').textContent = '待提交 · 等待';
   });
+  element('replay').addEventListener('click', () => {
+    if (!view || view.beats.length === 0) return;
+    clearTimeout(playbackTimer);
+    const snapshot = view;
+    let index = 0;
+    function advance() {
+      const beat = snapshot.beats[index++];
+      if (!beat) {
+        element('playback').textContent = `播放完成 · 第${snapshot.round - 1}回合`;
+        render(snapshot);
+        return;
+      }
+      element('playback').textContent = `第${beat.beat}拍 · ${resultLabels[beat.result]}`;
+      render({ ...snapshot, self: { ...snapshot.self, position: beat.to } });
+      playbackTimer = setTimeout(advance, 500);
+    }
+    advance();
+  });
   element('submit-plan').addEventListener('click', () => {
-    if (view) send({ kind: 'plan', round: view.round, requestId: crypto.randomUUID(), moves: selected ? [selected] : [] });
+    if (view) send({ kind: 'plan', round: view.round, requestId: crypto.randomUUID(), moves: selected });
   });
   element('lock-plan').addEventListener('click', () => {
     if (view) send({ kind: 'lock', round: view.round, requestId: crypto.randomUUID() });
