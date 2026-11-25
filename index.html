@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#171622" />
+    <title>黑暗森林 · 暮林石室</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <main class="preview">
+      <header>
+        <h1>暮林石室</h1>
+        <div class="controls">
+          <button id="reset-view" type="button" disabled>重置视角</button>
+          <button id="edges" type="button" aria-pressed="true" disabled>描边</button>
+        </div>
+      </header>
+      <div class="stage">
+        <canvas id="room" width="320" height="192" aria-label="青苔覆盖的石室和两只火盆。拖动画布或按方向键旋转视角。"></canvas>
+        <p id="error" role="status" hidden></p>
+      </div>
+      <footer>
+        <span>320 × 192 · 最近邻放大</span>
+        <span>拖动旋转</span>
+      </footer>
+    </main>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
