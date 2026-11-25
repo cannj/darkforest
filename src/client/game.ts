@@ -40,6 +40,7 @@ export function mountGame(render: (view: PlayerView) => void) {
       return item;
     });
     element('sightings').replaceChildren(...sightings, ...doors);
+    element('confrontations').textContent = snapshot.confrontations.map((entry) => `与 ${entry.opponent} 对峙 · 第${entry.round}回合第${entry.beat}拍接触`).join(' / ');
     render(snapshot);
   }
   const roomId = new URL(location.href).searchParams.get('room') ?? 'stone-room';

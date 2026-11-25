@@ -6,10 +6,10 @@ export type Terrain = z.infer<typeof terrainSchema>;
 export const roomSetupSchema = z.object({
   board: boardSchema.default(publicBoard),
   terrain: terrainSchema.default({ doors: {} }),
-  spawns: z.tuple([positionSchema, positionSchema]).default([{ row: 1, col: 1 }, { row: 3, col: 3 }]),
+  spawns: z.tuple([positionSchema, positionSchema], positionSchema).refine((spawns) => spawns.length <= 3).default([{ row: 1, col: 1 }, { row: 3, col: 3 }]),
   visionRange: z.int().min(1).max(32).default(1),
 }).strict().superRefine((setup, ctx) => {
-  if (setup.spawns.some((p) => p.row >= setup.board.rows || p.col >= setup.board.cols) || sameCell(setup.spawns[0], setup.spawns[1]))
+  if (setup.spawns.some((p) => p.row >= setup.board.rows || p.col >= setup.board.cols) || new Set(setup.spawns.map((p) => `${p.row},${p.col}`)).size !== setup.spawns.length)
     ctx.addIssue({ code: 'custom', message: '出生点必须在界内且不同格' });
   if (Object.keys(setup.terrain.doors).some((id) => !setup.board.edges.some((e) => e.id === id && e.kind === 'door')))
     ctx.addIssue({ code: 'custom', message: '动态门状态必须引用地图上的门' });

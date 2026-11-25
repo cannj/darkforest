@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 export const roomIdSchema = z.string().regex(/^[a-zA-Z0-9-]{1,32}$/);
-export const playerIdSchema = z.enum(['p1', 'p2']);
+export const playerIdSchema = z.enum(['p1', 'p2', 'p3']);
 export type PlayerId = z.infer<typeof playerIdSchema>;
 export const positionSchema = z.object({ row: z.int().nonnegative(), col: z.int().nonnegative() }).strict();
 export type Position = z.infer<typeof positionSchema>;
@@ -66,6 +66,8 @@ export const sightingSchema = observedPlayerSchema.extend({ round: z.int().posit
 export type Sighting = z.infer<typeof sightingSchema>;
 export const terrainMemorySchema = z.object({ id: z.string(), open: z.boolean(), round: z.int().positive(), beat: z.int().nonnegative() }).strict();
 export type TerrainMemory = z.infer<typeof terrainMemorySchema>;
+export const confrontationSchema = z.object({ opponent: playerIdSchema, round: z.int().positive(), beat: z.int().nonnegative() }).strict();
+export type Confrontation = z.infer<typeof confrontationSchema>;
 export const playbackSchema = z.object({
   round: z.int().positive(), beat: z.int().positive(), self: positionSchema,
   observation: observationSchema, memory: z.array(sightingSchema), terrainMemory: z.array(terrainMemorySchema),
@@ -79,6 +81,7 @@ export const playerViewSchema = z.object({
   deadline: z.number().nonnegative().nullable(),
   serverTime: z.number().nonnegative(),
   seats: z.int().nonnegative(),
+  confrontations: z.array(confrontationSchema),
   self: z.object({ id: playerIdSchema, position: positionSchema }).strict(),
   plan: planSchema,
   result: z.enum(['none', 'moved', 'blocked', 'waited']),

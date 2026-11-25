@@ -25,7 +25,7 @@ test('两名玩家秘密锁定单步计划后共同进入下一回合', () => {
 });
 
 test('两拍斜向移动逐拍提交并只向自己显示结果', () => {
-  const room = new Room('two-beats');
+  const room = new Room('two-beats', { spawns: [{ row: 1, col: 1 }, { row: 4, col: 4 }] });
   const a = room.join();
   const b = room.join();
   expect(room.command(a, { kind: 'plan', round: 1, requestId: 'plan', moves: [{ row: 2, col: 2 }, { row: 3, col: 2 }] })).toEqual({ kind: 'accepted' });
@@ -36,13 +36,12 @@ test('两拍斜向移动逐拍提交并只向自己显示结果', () => {
     { round: 1, beat: 1, from: { row: 1, col: 1 }, to: { row: 2, col: 2 }, result: 'moved' },
     { round: 1, beat: 2, from: { row: 2, col: 2 }, to: { row: 3, col: 2 }, result: 'moved' },
   ]);
-  expect(room.view(b).beats.every((beat) => beat.from.col === 3 && beat.to.col === 3)).toBe(true);
-  expect(room.view(b).playback[0]?.memory[0]?.position).toEqual({ row: 2, col: 2 });
-  expect(room.view(b).playback[1]?.memory[0]?.position).toEqual({ row: 3, col: 2 });
+  expect(room.view(b).beats.every((beat) => beat.from.col === 4 && beat.to.col === 4)).toBe(true);
+  expect(room.view(b).playback.every((frame) => frame.observation.players.length === 0)).toBe(true);
 });
 
 test('移动额度独立于等待拍，超额或超长计划被拒绝且不覆盖原草稿', () => {
-  const room = new Room('wait-beats');
+  const room = new Room('wait-beats', { spawns: [{ row: 1, col: 1 }, { row: 4, col: 4 }] });
   const a = room.join();
   const b = room.join();
   const moves = [null, { row: 2, col: 2 }, null, { row: 2, col: 1 }];
@@ -137,16 +136,19 @@ test('短暂目击按拍授权，消失后保留时间和位置，隐藏路径�
   room.command(b, { kind: 'plan', round: 1, requestId: 'bp', moves: [{ row: 2, col: 2 }, { row: 3, col: 2 }] });
   room.command(a, { kind: 'lock', round: 1, requestId: 'al' });
   room.command(b, { kind: 'lock', round: 1, requestId: 'bl' });
+  room.command(b, { kind: 'plan', round: 2, requestId: 'bp2', moves: [null, { row: 3, col: 2 }] });
+  room.command(a, { kind: 'lock', round: 2, requestId: 'al2' });
+  room.command(b, { kind: 'lock', round: 2, requestId: 'bl2' });
   expect(room.view(a).playback.map((f) => f.observation.players)).toEqual([
     [{ id: b, position: { row: 2, col: 2 } }], [], [], [],
   ]);
   expect(room.view(a).observation.players).toEqual([]);
-  expect(room.view(a).memory).toEqual([{ id: b, position: { row: 2, col: 2 }, round: 1, beat: 1 }]);
+  expect(room.view(a).memory).toEqual([{ id: b, position: { row: 2, col: 2 }, round: 2, beat: 1 }]);
   expect(room.view(a).playback[0]?.memory).toEqual(room.view(a).memory);
   expect(JSON.stringify(room.view(a))).not.toContain('"position":{"row":3,"col":2}');
-  room.command(a, { kind: 'lock', round: 2, requestId: 'al2' });
-  room.command(b, { kind: 'lock', round: 2, requestId: 'bl2' });
-  expect(room.view(a).memory).toEqual([{ id: b, position: { row: 2, col: 2 }, round: 1, beat: 1 }]);
+  room.command(a, { kind: 'lock', round: 3, requestId: 'al3' });
+  room.command(b, { kind: 'lock', round: 3, requestId: 'bl3' });
+  expect(room.view(a).memory).toEqual([{ id: b, position: { row: 2, col: 2 }, round: 2, beat: 1 }]);
 });
 
 test.each(['wall', 'door', 'window'] satisfies Board['edges'][number]['kind'][])('公开%s格边和动态状态分别决定视野与正交通行', (kind) => {
@@ -156,10 +158,12 @@ test.each(['wall', 'door', 'window'] satisfies Board['edges'][number]['kind'][])
   expect(room.view(a).board.edges[0]?.kind).toBe(kind);
   expect(room.view(a).observation.players.length).toBe(kind === 'window' ? 1 : 0);
   expect(room.view(a).observation.cells.some((p) => p.row === 2 && p.col === 2)).toBe(kind === 'window');
-  room.command(b, { kind: 'plan', round: 1, requestId: 'bp', moves: [{ row: 0, col: 2 }] });
-  room.command(a, { kind: 'plan', round: 1, requestId: 'ap', moves: [null, { row: 1, col: 2 }] });
-  room.command(a, { kind: 'lock', round: 1, requestId: 'al' });
-  room.command(b, { kind: 'lock', round: 1, requestId: 'bl' });
+  room.command(a, { kind: 'lock', round: 1, requestId: 'initial-a' });
+  room.command(b, { kind: 'lock', round: 1, requestId: 'initial-b' });
+  room.command(b, { kind: 'plan', round: 2, requestId: 'bp', moves: [{ row: 0, col: 2 }] });
+  room.command(a, { kind: 'plan', round: 2, requestId: 'ap', moves: [null, { row: 1, col: 2 }] });
+  room.command(a, { kind: 'lock', round: 2, requestId: 'al' });
+  room.command(b, { kind: 'lock', round: 2, requestId: 'bl' });
   expect(room.view(a).self.position).toEqual(kind === 'window' ? { row: 1, col: 2 } : { row: 1, col: 1 });
 });
 
