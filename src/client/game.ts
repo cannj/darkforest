@@ -47,13 +47,38 @@ export function mountGame(render: (view: PlayerView) => void) {
   const address = new URL('/room', location.href);
   address.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
   address.searchParams.set('room', roomId);
-  const socket = new WebSocket(address);
+  const storageKey = `darkforest-seat:${roomId}`;
+  let socket: WebSocket;
+  let fatal = false;
+  let serverOffset = 0;
+  function countdown() {
+    if (!view) return;
+    const phase = { waiting: '等待入座', planning: '计划阶段', resolving: '结算阶段' }[view.phase];
+    element('round').textContent = `第 ${view.round} 回合 · ${phase}`;
+    const target = document.getElementById('countdown');
+    if (target) target.textContent = view.deadline === null ? '等待满员后开始计时' :
+      `剩余 ${Math.max(0, Math.ceil((view.deadline - (Date.now() + serverOffset)) / 1000))} 秒`;
+  }
+  setInterval(countdown, 100);
+  function connect() {
+    const credential = sessionStorage.getItem(storageKey);
+    if (credential) address.searchParams.set('resume', credential);
+    socket = new WebSocket(address);
+    socket.addEventListener('message', receive);
+    socket.addEventListener('close', (event) => {
+      if (event.reason === '座位已在新连接恢复') fatal = true;
+      element('connection').textContent = fatal ? '座位已失效，请在新标签页加入' : '连接已断开 · 正在重连';
+      for (const button of buttons) button.disabled = true;
+      if (!fatal) setTimeout(connect, 500);
+    });
+    socket.addEventListener('error', () => { element('connection').textContent = '连接失败 · 正在重连'; });
+  }
   const buttons = document.querySelectorAll<HTMLButtonElement>('#game button');
   function send(command: Command) {
-    if (socket.readyState !== WebSocket.OPEN) return;
+    if (socket.readyState !== WebSocket.OPEN || view?.phase === 'resolving') return;
     socket.send(JSON.stringify(command));
   }
-  socket.addEventListener('message', (event: MessageEvent<string>) => {
+  function receive(event: MessageEvent<string>) {
     let input: unknown;
     try { input = JSON.parse(event.data); } catch { return; }
     const parsed = serverMessageSchema.safeParse(input);
@@ -61,7 +86,12 @@ export function mountGame(render: (view: PlayerView) => void) {
       element('connection').textContent = '收到无法读取的房间消息';
       return;
     }
+    if (parsed.data.kind === 'session') {
+      sessionStorage.setItem(storageKey, parsed.data.credential);
+      return;
+    }
     if (parsed.data.kind === 'error') {
+      if (parsed.data.message === '座位恢复凭证无效') fatal = true;
       element('connection').textContent = parsed.data.message;
       return;
     }
@@ -72,9 +102,11 @@ export function mountGame(render: (view: PlayerView) => void) {
     }
     clearTimeout(playbackTimer);
     view = next;
+    serverOffset = next.serverTime - Date.now();
+    countdown();
     element('connection').textContent = next.seats < 2 ? '已连接 · 等待另一名玩家' : '两名玩家已入座';
     element('seat').textContent = `座位 ${next.self.id}`;
-    element('round').textContent = `第 ${next.round} 回合 · 计划阶段`;
+
     element('board-summary').textContent = `公开地图 ${next.board.rows} × ${next.board.cols}`;
     element('position').textContent = `当前位置 (${next.self.position.row}, ${next.self.position.col})`;
     element('plan').textContent = `${next.plan.kind === 'locked' ? '已锁定' : '草稿'}${planText(next.plan.moves)}`;
@@ -84,16 +116,12 @@ export function mountGame(render: (view: PlayerView) => void) {
       return item;
     }));
     element('result').textContent = { none: '选择方向，提交后锁定计划', moved: '上轮移动成功', blocked: '上轮移动受阻', waited: '上轮等待' }[next.result];
-    for (const button of buttons) button.disabled = next.plan.kind === 'locked';
+    for (const button of buttons) button.disabled = next.plan.kind === 'locked' || next.phase === 'resolving';
     const replay = document.getElementById('replay');
     if (replay instanceof HTMLButtonElement) replay.disabled = next.beats.length === 0;
     display(next);
-  });
-  socket.addEventListener('close', () => {
-    element('connection').textContent = '连接已断开';
-    for (const button of buttons) button.disabled = true;
-  });
-  socket.addEventListener('error', () => { element('connection').textContent = '连接失败，请检查房间服务'; });
+  }
+  connect();
   document.querySelectorAll<HTMLButtonElement>('[data-dr]').forEach((button) => {
     button.addEventListener('click', () => {
       if (!view || view.plan.kind === 'locked') return;

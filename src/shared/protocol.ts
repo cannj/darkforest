@@ -75,7 +75,9 @@ export const playerViewSchema = z.object({
   roomId: roomIdSchema,
   board: boardSchema,
   round: z.int().positive(),
-  phase: z.literal('planning'),
+  phase: z.enum(['waiting', 'planning', 'resolving']),
+  deadline: z.number().nonnegative().nullable(),
+  serverTime: z.number().nonnegative(),
   seats: z.int().nonnegative(),
   self: z.object({ id: playerIdSchema, position: positionSchema }).strict(),
   plan: planSchema,
@@ -85,6 +87,7 @@ export const playerViewSchema = z.object({
 }).strict();
 export type PlayerView = z.infer<typeof playerViewSchema>;
 export const serverMessageSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('session'), credential: z.string().min(32).max(128) }).strict(),
   z.object({ kind: z.literal('view'), view: playerViewSchema }).strict(),
   z.object({ kind: z.literal('error'), message: z.string() }).strict(),
 ]);
