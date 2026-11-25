@@ -12,6 +12,6 @@ export default defineConfig({
   },
   webServer: [
     { command: 'npm run dev -- --port 5174 --strictPort', url: 'http://127.0.0.1:5174', reuseExistingServer: false },
-    { command: 'npm run server', port: 8788, reuseExistingServer: false },
+    { command: 'npm run server', port: 8788, reuseExistingServer: false, env: { MATCH_LOG_DIR: process.env.MATCH_LOG_DIR ?? 'artifacts/matches' } },
   ],
 });

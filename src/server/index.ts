@@ -3,6 +3,7 @@ import { WebSocket, WebSocketServer } from 'ws';
 import { z } from 'zod';
 import { roomIdSchema, type PlayerId, type ServerMessage } from '../shared/protocol.ts';
 import { Room } from './room.ts';
+import { createRecorder } from './recording.ts';
 
 const port = z.coerce.number().int().min(1).max(65535).parse(process.env.ROOM_PORT ?? 8788);
 const roundDurationMs = z.coerce.number().int().min(100).parse(process.env.ROUND_DURATION_MS ?? 30_000);
@@ -50,7 +51,8 @@ server.on('connection', (socket, request) => {
     credential = resume;
     session = { ...previous, socket };
   } else {
-    const room = rooms.get(parsed.data) ?? new Room(parsed.data, {}, { now: Date.now, roundDurationMs, settlementDurationMs });
+    const room = rooms.get(parsed.data) ?? new Room(parsed.data, {}, { now: Date.now, roundDurationMs, settlementDurationMs,
+      record: createRecorder(process.env.MATCH_LOG_DIR ?? '.local/matches', parsed.data) });
     try {
       session = { room, identity: room.join(), socket };
     } catch {
