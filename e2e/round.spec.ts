@@ -37,7 +37,7 @@ test('两个隔离浏览器在石室完成真实联机回合', async ({ browser 
     if (message.kind === 'view') {
       expect(message.view.self).toEqual({ id: 'p2', position: { row: 3, col: 3 } });
       expect(message.view.plan).toEqual({ kind: 'draft', moves: [] });
-      expect(Object.keys(message.view).sort()).toEqual(['board', 'phase', 'plan', 'result', 'roomId', 'round', 'seats', 'self']);
+      expect(Object.keys(message.view).sort()).toEqual(['beats', 'board', 'phase', 'plan', 'result', 'roomId', 'round', 'seats', 'self']);
     }
   }
   await second.getByRole('button', { name: '北 ↑', exact: true }).click();
@@ -59,6 +59,36 @@ test('两个隔离浏览器在石室完成真实联机回合', async ({ browser 
   await first.keyboard.press('ArrowLeft');
   await first.screenshot({ path: 'artifacts/first-round-rotated.png', fullPage: true });
   expect(errors).toEqual([]);
+  await a.close();
+  await b.close();
+});
+
+test('玩家安排两次移动并在画面播放自己的四拍结果', async ({ browser }) => {
+  const a = await browser.newContext();
+  const b = await browser.newContext();
+  const first = await a.newPage();
+  const second = await b.newPage();
+  const url = `http://127.0.0.1:5174/?room=beats-${Date.now()}`;
+  await first.goto(url);
+  await second.goto(url);
+  await expect(second.getByTestId('seat')).toHaveText('座位 p2');
+  await first.getByRole('button', { name: '东南 ↘', exact: true }).click();
+  await first.getByRole('button', { name: '等待', exact: true }).click();
+  await first.getByRole('button', { name: '南 ↓', exact: true }).click();
+  await first.getByRole('button', { name: '提交计划', exact: true }).click();
+  await expect(first.getByTestId('plan')).toContainText('第3拍 → (3, 2)');
+  await first.getByRole('button', { name: '锁定计划', exact: true }).click();
+  await second.getByRole('button', { name: '锁定计划', exact: true }).click();
+  await expect(first.getByTestId('position')).toHaveText('当前位置 (3, 2)');
+  await expect(first.getByTestId('beat-results')).toContainText('第1拍 · 移动成功 · (1, 1) → (2, 2)');
+  await expect(first.getByTestId('beat-results')).toContainText('第2拍 · 等待 · (2, 2) → (2, 2)');
+  await expect(first.getByTestId('beat-results')).toContainText('第3拍 · 移动成功 · (2, 2) → (3, 2)');
+  await expect(second.getByTestId('beat-results')).not.toContainText('(2, 2)');
+  await first.getByRole('button', { name: '播放上轮', exact: true }).click();
+  await expect(first.locator('#room')).toHaveAttribute('data-position', '2,2');
+  await expect(first.getByTestId('playback')).toHaveText('播放完成 · 第1回合');
+  await expect(first.locator('#room')).toHaveAttribute('data-position', '3,2');
+  await first.screenshot({ path: 'artifacts/two-moves-playback.png', fullPage: true });
   await a.close();
   await b.close();
 });

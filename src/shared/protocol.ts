@@ -13,15 +13,25 @@ export const boardSchema = z.object({
 export type Board = z.infer<typeof boardSchema>;
 export const publicBoard: Board = { version: 'stone-room-v1', rows: 5, cols: 5 };
 
+export const movementLimit = 2;
+export const roundBeatLimit = 4;
+const movesSchema = z.array(positionSchema.nullable()).max(roundBeatLimit)
+  .refine((moves) => moves.filter((move) => move !== null).length <= movementLimit);
+export const beatResultSchema = z.object({
+  round: z.int().positive(), beat: z.int().positive(),
+  from: positionSchema, to: positionSchema, result: z.enum(['moved', 'blocked', 'waited']),
+}).strict();
+export type BeatResult = z.infer<typeof beatResultSchema>;
+
 const commandFields = { round: z.int().positive(), requestId: z.string().min(1).max(80) };
 export const commandSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('plan'), ...commandFields, moves: z.array(positionSchema).max(1) }).strict(),
+  z.object({ kind: z.literal('plan'), ...commandFields, moves: movesSchema }).strict(),
   z.object({ kind: z.literal('lock'), ...commandFields }).strict(),
 ]);
 export type Command = z.infer<typeof commandSchema>;
 export const planSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('draft'), moves: z.array(positionSchema) }).strict(),
-  z.object({ kind: z.literal('locked'), moves: z.array(positionSchema) }).strict(),
+  z.object({ kind: z.literal('draft'), moves: movesSchema }).strict(),
+  z.object({ kind: z.literal('locked'), moves: movesSchema }).strict(),
 ]);
 export type Plan = z.infer<typeof planSchema>;
 export const playerViewSchema = z.object({
@@ -33,6 +43,7 @@ export const playerViewSchema = z.object({
   self: z.object({ id: playerIdSchema, position: positionSchema }).strict(),
   plan: planSchema,
   result: z.enum(['none', 'moved', 'blocked', 'waited']),
+  beats: z.array(beatResultSchema),
 }).strict();
 export type PlayerView = z.infer<typeof playerViewSchema>;
 export const serverMessageSchema = z.discriminatedUnion('kind', [
