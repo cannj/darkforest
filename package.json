@@ -4,12 +4,24 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
-    "build": "vite build"
+    "build": "npm run typecheck && vite build && tsc",
+    "typecheck": "tsc --noEmit",
+    "server": "node --experimental-strip-types src/server/index.ts",
+    "replay": "node --experimental-strip-types src/server/replay-cli.ts",
+    "test": "vitest run",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
-    "three": "0.187.0"
+    "three": "0.187.0",
+    "ws": "8.23.0",
+    "zod": "4.6.7"
   },
   "devDependencies": {
-    "vite": "8.3.8"
+    "@playwright/test": "1.65.1",
+    "@types/node": "24.19.4",
+    "@types/ws": "8.18.2",
+    "typescript": "7.0.2",
+    "vite": "8.3.8",
+    "vitest": "5.1.2"
   }
 }

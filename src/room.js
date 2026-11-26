@@ -6,7 +6,9 @@ export const braziers = [
   { x: -3.6, y: 0.05, z: -1.85, scale: 0.78 },
 ];
 
-export function buildRoom(scene, material) {
+export function buildRoom(scene, material, { sections, archCenter = -0.35 } = {}) {
+  let section = 'floor';
+  const created = [];
   let seed = 31821;
   function random() {
     seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
@@ -27,6 +29,8 @@ export function buildRoom(scene, material) {
     const object = new THREE.Mesh(geometry, surface);
     object.position.set(x, y, z);
     object.scale.set(width, height, depth);
+    object.userData.roomSection = section;
+    created.push(object);
     parent.add(object);
     return object;
   }
@@ -59,8 +63,9 @@ export function buildRoom(scene, material) {
     }
   }
 
+  section = 'arch';
   const wallBase = -3.73;
-  const archX = -0.35;
+  const archX = archCenter;
   const opening = 1.03;
   const spring = 1.56;
   const archDepth = 0.83;
@@ -131,6 +136,7 @@ export function buildRoom(scene, material) {
     slab(x, wallTop + offset, wallBase, width, 0.22, 0.76, pick(stone.slice(2, 5)));
   }
 
+  section = 'side-wall';
   const wallHeights = [6, 6, 6, 5, 4, 3, 2, 1];
   for (let row = 0; row < 6; row++) {
     for (let column = 0; column < wallHeights.length; column++) {
@@ -141,6 +147,7 @@ export function buildRoom(scene, material) {
     }
   }
 
+  section = 'pillars';
   for (const [x, z, height] of [[-4.62, 1.79, 1.48], [4.56, -2.82, 1.89]]) {
     slab(x, 0.13, z, 1.04, 0.26, 0.97, stone[3]);
     for (let y = 0.45; y < height; y += 0.43) {
@@ -149,6 +156,7 @@ export function buildRoom(scene, material) {
     slab(x, height, z, 0.86, 0.18, 0.79, stone[3]).rotation.y = -0.12;
   }
 
+  section = 'debris';
   for (const [x, z, spread, count] of [[-3.65, 1.72, 0.85, 7], [4.12, -2.03, 0.72, 8], [3.4, 3.45, 0.72, 5], [-2.8, -3.2, 0.57, 7]]) {
     for (let i = 0; i < count; i++) {
       const size = 0.16 + random() * 0.46;
@@ -158,6 +166,7 @@ export function buildRoom(scene, material) {
     }
   }
 
+  section = 'moss';
   const mossPatches = [
     [-4.12, 0.04, 0.58, 0.55, 1.45, 28], [-4.21, 0.05, -2.87, 0.55, 0.7, 17],
     [3.27, 0.04, -3.17, 1.25, 0.38, 29], [4.02, 0.04, 2.7, 0.73, 0.76, 26],
@@ -185,6 +194,7 @@ export function buildRoom(scene, material) {
     }
   }
 
+  section = 'ivy';
   for (const [x, top, count] of [[-2.9, 3.23, 11], [-2.12, 3.18, 7], [1.76, 3.18, 13], [2.23, 3.11, 8]]) {
     for (let i = 0; i < count; i++) {
       const size = 0.15 - i * 0.004;
@@ -195,6 +205,7 @@ export function buildRoom(scene, material) {
     }
   }
 
+  section = 'braziers';
   const pedestalBase = new THREE.CylinderGeometry(0.52, 0.59, 0.22, 8);
   const stem = new THREE.CylinderGeometry(0.15, 0.22, 0.49, 6);
   const bowl = new THREE.CylinderGeometry(0.51, 0.26, 0.29, 8, 1, true);
@@ -233,8 +244,23 @@ export function buildRoom(scene, material) {
       object: mesh(spark, ember[index % 2 ? 2 : 3], 0, 1, 0, 0.06, 0.08, 0.06, brazier),
       phase: random(), angle: random() * Math.PI * 2,
     }));
+    for (const { object } of [...tongues, ...sparks]) object.userData.animated = true;
     return { tongues, sparks };
   });
+
+  if (sections) {
+    if (!sections.includes('braziers')) fires.length = 0;
+    for (const object of created) {
+      if (!sections.includes(object.userData.roomSection) ||
+          (object.userData.roomSection === 'moss' && !sections.includes('arch') && object.position.y > 0.3)) object.removeFromParent();
+    }
+    for (const child of [...scene.children]) if (child.isGroup && child.children.length === 0) child.removeFromParent();
+    const surfaces = [...stone, ...floorStone, ...moss, ...ember, brazierMetal];
+    const retainedMaterials = new Set(created.filter(object => object.parent).map(object => object.material));
+    for (const surface of surfaces) if (!retainedMaterials.has(surface)) surface.dispose();
+    const retained = new Set(created.filter(object => object.parent).map(object => object.geometry));
+    for (const geometry of new Set(created.map(object => object.geometry))) if (!retained.has(geometry)) geometry.dispose();
+  }
 
   return (time) => {
     for (const { tongues, sparks } of fires) {

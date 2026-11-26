@@ -100,3 +100,11 @@ footer {
   font: 11px ui-monospace, monospace;
   letter-spacing: 0.06em;
 }
+
+#game { padding: 16px 0; font-size: 13px; }
+.game-status { display: flex; flex-wrap: wrap; gap: 12px 24px; margin-bottom: 8px; }
+#game p { color: #8f9c9d; line-height: 1.6; }
+.plan-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 24px; }
+.directions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+.plan-summary { display: grid; gap: 10px; }
+button:disabled { opacity: 0.4; cursor: default; }
