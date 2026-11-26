@@ -35,7 +35,14 @@ function createGroundLightMask() {
 }
 
 const groundLightMask = createGroundLightMask();
-const groundLightSpots = braziers.map(({ x, z, scale }) => new THREE.Vector3(x, z, 3.05 * scale));
+// A current view contains at most nine cells with two original braziers each.
+const groundLightSpots = Array.from({ length: 18 }, () => new THREE.Vector3());
+const groundLightCount = { value: 0 };
+function setGroundLights(spots) {
+  groundLightCount.value = Math.min(spots.length, groundLightSpots.length);
+  groundLightSpots.forEach((target, index) => target.copy(spots[index] ?? new THREE.Vector3()));
+}
+setGroundLights(braziers.map(({ x, z, scale }) => new THREE.Vector3(x, z, 3.05 * scale)));
 const fireIntensity = 4.2;
 
 function material(family, bias = 0, { glow = -1, ground = false } = {}) {
@@ -49,6 +56,7 @@ function material(family, bias = 0, { glow = -1, ground = false } = {}) {
       glow: { value: glow },
       groundLightMask: { value: groundLightMask },
       groundLightSpots: { value: groundLightSpots },
+      groundLightCount,
     },
     vertexShader: /* glsl */ `
       varying vec3 worldPosition;
@@ -88,11 +96,13 @@ function material(family, bias = 0, { glow = -1, ground = false } = {}) {
 
       #ifdef GROUND_LIGHT
         uniform sampler2D groundLightMask;
+        uniform int groundLightCount;
         uniform vec3 groundLightSpots[${groundLightSpots.length}];
 
         float groundLight(vec3 normal) {
           float light = 0.0;
           for (int i = 0; i < ${groundLightSpots.length}; i++) {
+            if (i >= groundLightCount) break;
             vec3 spot = groundLightSpots[i];
             vec2 offset = (worldPosition.xz - spot.xy) / spot.z;
             if (dot(offset, offset) < 1.0) {
@@ -310,6 +320,7 @@ function start() {
       layoutKey = nextLayoutKey;
     }
     classic?.update(view);
+    if (classic?.groundLightSpots) setGroundLights(classic.groundLightSpots);
     const visible = new Set(view.observation.cells.map((c) => `${c.row},${c.col}`));
     for (const [key, { tile, terrain }] of tiles) tile.material = terrainMaterials[terrain][visible.has(key) ? 'visible' : 'fog'];
     dynamic.clear();
@@ -355,6 +366,7 @@ function start() {
       light.intensity = fireIntensity * scale * (1 + 0.08 * Math.sin(time * 9 + phase) + 0.05 * Math.sin(time * 17.9));
     }
     animateFire(time);
+    classic?.animate?.(time);
     pass.render(renderer, null);
   }
 
