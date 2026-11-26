@@ -19,7 +19,7 @@ export function roomAsset(template, material, edge = false) {
   const group = new THREE.Group();
   const animate = buildRoom(group, material, { sections: edge ? ['arch', 'ivy'] : sections[template], archCenter: 0 });
   if (template === 'broken-corner' && !edge) {
-    for (const child of [...group.children]) if (child.userData.roomSection === 'side-wall' && child.position.z > -1.7) child.removeFromParent();
+    for (const child of [...group.children]) if (child.userData.roomSection === 'side-wall' && (child.position.z > -1.7 || child.position.z < -2.8)) child.removeFromParent();
   }
   group.scale.copy(roomScale);
   if (edge) group.position.z = 3.73 * roomScale.z;
@@ -53,7 +53,7 @@ export function roomAsset(template, material, edge = false) {
   }
   if (template === 'window-ruin' && !edge) {
     const window = roomAsset('stone-chamber', material, true).group;
-    window.scale.set(0.32, 0.64, 0.5); window.position.set(-1.17, 0, -1.25);
+    window.scale.set(0.22, 0.64, 0.5); window.position.set(-1.45, 0, -0.65);
     output.add(window);
   }
   return { group: output, animate };

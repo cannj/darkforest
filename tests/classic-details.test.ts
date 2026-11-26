@@ -25,8 +25,8 @@ test('四类场景的中心通路不被装饰物挡住，共享门打开后能�
     const detail = buildClassicDetails(() => new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }));
     detail.update({ rows: 1, cols: 1, cells: [{ row: 0, col: 0, terrain: 'stone', template }], edges: [] });
     detail.group.updateMatrixWorld(true);
-    for (const [x, z] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-      const ray = new THREE.Raycaster(new THREE.Vector3(0, 0.5, 0), new THREE.Vector3(x, 0, z), 0, 2);
+    for (const [x, z] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]) {
+      const ray = new THREE.Raycaster(new THREE.Vector3(0, 0.5, 0), new THREE.Vector3(x, 0, z).normalize(), 0, Math.hypot(x, z) * 2);
       expect(ray.intersectObject(detail.group, true), template).toHaveLength(0);
     }
     detail.dispose();
