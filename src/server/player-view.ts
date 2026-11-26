@@ -2,6 +2,12 @@ import type { PlayerId, Observation, Playback, Sighting, TerrainMemory, PlayerVi
 import { canSee, type RoomSetup } from './board.ts';
 import type { CommittedBeat, Confrontation, PlayerState } from './rules.ts';
 
+function projectBoard(setup: RoomSetup, observation: Observation) {
+  if (!setup.exploration) return setup.board;
+  const visible = (p: { row: number; col: number }) => observation.cells.some(c => c.row === p.row && c.col === p.col);
+  return { ...setup.board, cells: setup.board.cells.filter(visible), edges: setup.board.edges.filter(e => visible(e.a) || visible(e.b)) };
+}
+
 type ViewState = { setup: RoomSetup; players: PlayerState[]; round: number };
 
 function playerFor(players: PlayerState[], identity: PlayerId): PlayerState {
@@ -21,19 +27,20 @@ export class PlayerViews {
     for (const player of state.players) {
       const observation = this.capture(player.id, state, beat);
       const frames = this.playback.get(player.id) ?? [];
-      frames.push(structuredClone({ round: state.round, beat, self: player.position, observation, memory: this.memories.get(player.id) ?? [], terrainMemory: this.terrainMemories.get(player.id) ?? [] }));
+      frames.push(structuredClone({ round: state.round, beat, self: player.position, ...(state.setup.exploration ? { board: projectBoard(state.setup, observation) } : {}), observation, memory: this.memories.get(player.id) ?? [], terrainMemory: this.terrainMemories.get(player.id) ?? [] }));
       this.playback.set(player.id, frames);
     }
   }
 
   project(identity: PlayerId, state: ViewState & { roomId: string; phase: PlayerView['phase']; deadline: number | null; serverTime: number; beats: CommittedBeat[]; settledRound: number; confrontations: Confrontation[] }): PlayerView {
     const player = playerFor(state.players, identity);
+    const observation = this.observe(identity, state);
     return structuredClone({
-      roomId: state.roomId, board: state.setup.board, round: state.round, phase: state.phase, deadline: state.deadline, serverTime: state.serverTime, seats: state.players.length,
+      roomId: state.roomId, board: projectBoard(state.setup, observation), ...(state.setup.exploration ? { exploration: state.setup.exploration } : {}), round: state.round, phase: state.phase, deadline: state.deadline, serverTime: state.serverTime, seats: state.players.length,
       confrontations: state.confrontations.filter((entry) => entry.participants.includes(identity)).map(({ participants, round, beat }) => ({ opponent: participants[0] === identity ? participants[1] : participants[0], round, beat })),
       self: { id: player.id, position: player.position }, plan: player.plan, result: state.beats.flatMap((beat) => beat.results).findLast((r) => r.playerId === identity && r.result !== 'waited')?.result ?? player.result,
       terrainMemory: this.terrainMemories.get(identity) ?? [],
-      observation: this.observe(identity, state), memory: this.memories.get(identity) ?? [], playback: this.playback.get(identity) ?? [],
+      observation, memory: this.memories.get(identity) ?? [], playback: this.playback.get(identity) ?? [],
       beats: state.beats.flatMap((beat) => beat.results.filter((result) => result.playerId === identity)
         .map(({ playerId, ...result }) => ({ round: state.settledRound, ...result }))),
     });

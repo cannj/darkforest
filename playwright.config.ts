@@ -4,6 +4,7 @@ export default defineConfig({
   testDir: './e2e',
   outputDir: 'artifacts/playwright',
   use: {
+    reducedMotion: 'reduce',
     viewport: { width: 1280, height: 960 },
     launchOptions: {
       args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'],

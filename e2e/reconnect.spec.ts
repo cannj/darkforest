@@ -28,7 +28,7 @@ test('真实断网后恢复原座位，锁定行动离线执行，未锁定草�
     expect(received).toHaveLength(count);
     await second.getByRole('button', { name: '东 →', exact: true }).click();
     await second.getByRole('button', { name: '提交计划', exact: true }).click();
-    await expect(second.getByTestId('plan')).toHaveText('草稿 → (3, 4)');
+    await expect(second.getByTestId('plan')).toHaveText('草稿 → (8, 9)');
     await a.setOffline(true); await b.setOffline(true);
     await expect(first.locator('#connection')).toContainText('连接已断开');
     await expect(second.locator('#connection')).toContainText('连接已断开');
@@ -38,7 +38,7 @@ test('真实断网后恢复原座位，锁定行动离线执行，未锁定草�
     await expect(first.getByTestId('round')).toHaveText('第 2 回合 · 计划阶段');
     await expect(second.getByTestId('round')).toHaveText('第 2 回合 · 计划阶段');
     await expect(first.getByTestId('position')).toHaveText('当前位置 (1, 0)');
-    await expect(second.getByTestId('position')).toHaveText('当前位置 (3, 3)');
+    await expect(second.getByTestId('position')).toHaveText('当前位置 (8, 8)');
     expect(received.at(-1)?.self.id).toBe('p2');
     expect(received.at(-1)?.deadline).toBeGreaterThan(initial?.deadline ?? 0);
     expect(credential).toHaveLength(43);

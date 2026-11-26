@@ -5,6 +5,7 @@ export const terrainSchema = z.object({ doors: z.record(z.string(), z.boolean())
 export type Terrain = z.infer<typeof terrainSchema>;
 export const roomSetupSchema = z.object({
   board: boardSchema.default(publicBoard),
+  exploration: z.literal('player-vision').optional(),
   terrain: terrainSchema.default({ doors: {} }),
   spawns: z.tuple([positionSchema, positionSchema], positionSchema).refine((spawns) => spawns.length <= 3).default([{ row: 1, col: 1 }, { row: 3, col: 3 }]),
   visionRange: z.int().min(1).max(32).default(1),
