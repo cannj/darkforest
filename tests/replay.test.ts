@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, test, vi } from 'vitest';
@@ -54,4 +54,9 @@ test('实际房间记录可重跑对峙与超时补等待，并拒绝改写结�
   expect(() => replay(log.replace(/"authority":"[a-f0-9]+"/, '"authority":"' + '0'.repeat(64) + '"'))).toThrow(/结果不一致/);
   expect(() => replay(log.replace(/"digest":"[a-f0-9]+"/, '"digest":"' + '0'.repeat(64) + '"'))).toThrow(/结果不一致/);
   expect(() => replay(log.replace('"source":"timeout","moves":[]', '"source":"timeout","moves":[null]'))).toThrow();
+});
+
+test('改动前格式 1 的公开地图录像仍可核对两轮实际摘要', () => {
+  expect(replay(readFileSync(new URL('./fixtures/public-map-v1.jsonl', import.meta.url), 'utf8')))
+    .toEqual({ roomId: 'legacy-exploration-check', rounds: 2 });
 });

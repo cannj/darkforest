@@ -52,6 +52,7 @@ test('隔离浏览器真实对局记录对峙和超时，开发入口重跑并�
       if (!view) throw new Error('missing live settlement');
       expect(record.observations.find(entry => entry.playerId === view.self.id)?.digest).toBe(digest({
         playback: view.playback, memory: view.memory, terrainMemory: view.terrainMemory,
+        ...(view.exploration ? { mapMemory: view.mapMemory } : {}),
         observation: view.observation, confrontations: view.confrontations,
       }));
     }

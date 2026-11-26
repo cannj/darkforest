@@ -114,6 +114,7 @@ export class Room {
       observations: this.players.map(({ id }) => {
         const view = this.view(id);
         return { playerId: id, digest: digest({ playback: view.playback, memory: view.memory,
+          ...(this.setup.exploration ? { mapMemory: view.mapMemory } : {}),
           terrainMemory: view.terrainMemory, observation: view.observation, confrontations: view.confrontations }) };
       }),
     });

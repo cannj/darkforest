@@ -60,7 +60,15 @@ test('经典探索只传当前授权布局，移动、回放和恢复按座位�
     await expect(first.locator('#room')).toHaveAttribute('data-position', '2,2');
     await expect(first.locator('#room')).not.toHaveAttribute('data-layout-cells', /4,4/);
     await expect(first.locator('#room')).not.toHaveAttribute('data-memory-cells', /4,4/);
-    await first.clock.runFor(2500);
+    await expect(first.locator('#room')).toHaveAttribute('data-remembered-cells', /0,0/);
+    await first.screenshot({ path: 'artifacts/exploration-beat1.png', fullPage: true });
+    await first.clock.runFor(500);
+    await expect(first.getByTestId('playback')).toContainText('第2拍');
+    await expect(first.locator('#room')).toHaveAttribute('data-memory-cells', /4,4/);
+    await expect(first.locator('#room')).toHaveAttribute('data-remembered-cells', /0,0/);
+    await first.clock.runFor(2000);
+    await expect(first.getByTestId('playback')).toContainText('播放完成');
+    await expect(first.locator('#room')).toHaveAttribute('data-memory-cells', knownCells!);
     await expect(first.locator('#room')).toHaveAttribute('data-position', '3,3');
     await first.screenshot({ path: 'artifacts/exploration-moved.png', fullPage: true });
     await first.locator('#room').focus(); await first.keyboard.press('ArrowLeft');
@@ -75,7 +83,11 @@ test('经典探索只传当前授权布局，移动、回放和恢复按座位�
       expect(view.board.cells.map(({ row, col }) => ({ row, col }))).toEqual(view.observation.cells);
       const visible = (p: { row: number; col: number }) => view.observation.cells.some(c => c.row === p.row && c.col === p.col);
       expect(view.board.edges.every(e => visible(e.a) || visible(e.b))).toBe(true);
-      for (const frame of view.playback) expect(frame.board?.cells.map(({ row, col }) => ({ row, col }))).toEqual(frame.observation.cells);
+      for (const frame of view.playback) {
+        expect(frame.board?.cells.map(({ row, col }) => ({ row, col }))).toEqual(frame.observation.cells);
+        const otherSpawn = view.self.id === 'p1' ? { row: 8, col: 8 } : { row: 1, col: 1 };
+        expect(frame.mapMemory?.cells.some(c => c.row === otherSpawn.row && c.col === otherSpawn.col)).toBe(false);
+      }
     }
     expect(errors).toEqual([]);
   } finally { await a.close(); await b.close(); }

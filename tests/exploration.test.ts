@@ -31,6 +31,7 @@ test('逐拍布局不含后拍才看到的格，旧房间保留完整地图和�
   expect(legacy.view(l).board).toEqual(publicBoard);
   expect(legacy.view(l)).not.toHaveProperty('exploration');
   expect(legacy.view(l).playback[0]).not.toHaveProperty('board');
+  expect(legacy.view(l).playback[0]).not.toHaveProperty('mapMemory');
 });
 
 test('地图记忆保留初始及途经布局并与当前视野和其他座位隔离', () => {
@@ -69,4 +70,28 @@ test('记忆保留看见过的墙门窗及门状态，共享边不揭示遮挡�
   expect(room.view(a).mapMemory?.cells.length).toBeGreaterThan(0);
   const legacy = new Room('legacy-memory'); const l = legacy.join();
   expect(legacy.view(l)).not.toHaveProperty('mapMemory');
+});
+
+test('逐拍地图记忆保留旧格边且不提前泄露后拍或另一座位的发现', () => {
+  const room = new Room('beat-memory', { exploration: 'player-vision', board: { ...publicBoard, edges: [
+    { id: 'old-wall', a: { row: 0, col: 1 }, b: { row: 0, col: 2 }, kind: 'wall' },
+    { id: 'later-window', a: { row: 4, col: 3 }, b: { row: 4, col: 4 }, kind: 'window' },
+  ] }, spawns: [{ row: 1, col: 1 }, { row: 0, col: 4 }] });
+  const a = room.join(); const b = room.join();
+  room.command(a, { kind: 'plan', round: 1, requestId: 'move', moves: [{ row: 2, col: 2 }, { row: 3, col: 3 }] });
+  room.command(a, { kind: 'lock', round: 1, requestId: 'a' });
+  room.command(b, { kind: 'lock', round: 1, requestId: 'b' });
+  const view = playerViewSchema.parse(room.view(a));
+  expect(view.playback[0]).toMatchObject({ self: { row: 2, col: 2 }, mapMemory: {
+    cells: expect.arrayContaining([expect.objectContaining({ row: 0, col: 0 })]),
+    edges: [expect.objectContaining({ id: 'old-wall' })],
+  } });
+  expect(view.playback[0]?.mapMemory?.cells.some(c => c.row === 4 && c.col === 4)).toBe(false);
+  expect(view.playback[0]?.mapMemory?.cells.some(c => c.row === 0 && c.col === 4)).toBe(false);
+  expect(view.playback[1]?.mapMemory?.cells.some(c => c.row === 4 && c.col === 4)).toBe(true);
+  expect(view.playback[1]?.mapMemory?.edges.map(e => e.id)).toEqual(['later-window', 'old-wall']);
+  expect(view.playback[3]?.mapMemory).toEqual(view.mapMemory);
+  expect(room.view(b).playback[0]?.mapMemory?.cells.some(c => c.row === 0 && c.col === 0)).toBe(false);
+  view.playback[0]?.mapMemory?.cells.splice(0);
+  expect(room.view(a).playback[0]?.mapMemory?.cells.some(c => c.row === 0 && c.col === 0)).toBe(true);
 });
