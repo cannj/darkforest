@@ -35,8 +35,8 @@ function createGroundLightMask() {
 }
 
 const groundLightMask = createGroundLightMask();
-// A current view contains at most nine cells with two original braziers each.
-const groundLightSpots = Array.from({ length: 18 }, () => new THREE.Vector3());
+const maxVisibleClassicCells = 9;
+const groundLightSpots = Array.from({ length: maxVisibleClassicCells * braziers.length }, () => new THREE.Vector3());
 const groundLightCount = { value: 0 };
 function setGroundLights(spots) {
   groundLightCount.value = Math.min(spots.length, groundLightSpots.length);
@@ -238,7 +238,6 @@ function start() {
   const targetGeometry = new THREE.OctahedronGeometry(0.33);
   const memoryGeometry = new THREE.BoxGeometry(0.72, 0.18, 0.72);
   let boardVersion;
-  let layoutKey;
   let classic;
   let focusSelf = false;
   const ownPosition = new THREE.Vector3();
@@ -263,13 +262,11 @@ function start() {
     if (event.button === 2 || event.button === 0 && (event.shiftKey || event.ctrlKey || event.metaKey)) { focusSelf = false; canvas.dataset.cameraMode = 'free'; }
   });
   mountGame((view) => {
-    const isClassic = view.exploration === 'player-vision' || view.board.version === 'classic-v1';
-    const nextLayoutKey = JSON.stringify([view.board, view.mapMemory]);
+    const isClassic = view.exploration === 'player-vision';
     const cellSize = isClassic ? classicCellSize : 1;
     const x = (col) => (col - (view.board.cols - 1) / 2) * cellSize;
     const z = (row) => (row - (view.board.rows - 1) / 2) * cellSize;
-    if (boardVersion !== view.board.version || layoutKey !== nextLayoutKey) {
-      const newBoard = boardVersion !== view.board.version;
+    if (boardVersion !== view.board.version) {
       classic?.dispose();
       classic = undefined;
       for (const mesh of board.children) mesh.geometry?.dispose();
@@ -278,31 +275,29 @@ function start() {
       legacyRoom.visible = !isClassic;
       for (const { light } of fireLights) light.visible = !isClassic;
       focusButton.hidden = overviewButton.hidden = !isClassic;
-      if (newBoard) focusSelf = false;
+      focusSelf = false;
       if (isClassic) {
-        classic = buildClassicScene(view.board, material, view.mapMemory);
+        classic = buildClassicScene(material);
         board.add(classic.group);
-        if (newBoard) {
-          const halfHeight = Math.max(view.board.rows, view.board.cols) * classicCellSize * 0.44;
-          camera.left = -halfHeight * width / height;
-          camera.right = halfHeight * width / height;
-          camera.top = halfHeight;
-          camera.bottom = -halfHeight;
-          camera.zoom = 1;
-          camera.position.set(48, 52, 60);
-          orbit.target.set(0, 0.6, 0);
-          orbit.enableZoom = true;
-          orbit.minZoom = 1;
-          orbit.maxZoom = 9;
-          orbit.enablePan = true;
-          camera.updateProjectionMatrix();
-          orbit.update();
-          orbit.saveState();
-          focusSelf = true;
-          camera.zoom = 3.2;
-          camera.updateProjectionMatrix();
-          document.querySelector('h1').textContent = '黑暗森林 · 经典地图';
-        }
+        const halfHeight = Math.max(view.board.rows, view.board.cols) * classicCellSize * 0.44;
+        camera.left = -halfHeight * width / height;
+        camera.right = halfHeight * width / height;
+        camera.top = halfHeight;
+        camera.bottom = -halfHeight;
+        camera.zoom = 1;
+        camera.position.set(48, 52, 60);
+        orbit.target.set(0, 0.6, 0);
+        orbit.enableZoom = true;
+        orbit.minZoom = 1;
+        orbit.maxZoom = 9;
+        orbit.enablePan = true;
+        camera.updateProjectionMatrix();
+        orbit.update();
+        orbit.saveState();
+        focusSelf = true;
+        camera.zoom = 3.2;
+        camera.updateProjectionMatrix();
+        document.querySelector('h1').textContent = '黑暗森林 · 经典地图';
       } else {
         for (const cell of view.board.cells) {
           const tile = new THREE.Mesh(new THREE.BoxGeometry(0.94, 0.06, 0.94), terrainMaterials[cell.terrain].fog);
@@ -321,7 +316,6 @@ function start() {
         }
       }
       boardVersion = view.board.version;
-      layoutKey = nextLayoutKey;
     }
     classic?.update(view);
     if (classic?.groundLightSpots) setGroundLights(classic.groundLightSpots);

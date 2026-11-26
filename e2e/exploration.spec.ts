@@ -61,6 +61,12 @@ test('经典探索只传当前授权布局，移动、回放和恢复按座位�
     await expect(first.locator('#room')).not.toHaveAttribute('data-layout-cells', /4,4/);
     await expect(first.locator('#room')).not.toHaveAttribute('data-memory-cells', /4,4/);
     await expect(first.locator('#room')).toHaveAttribute('data-remembered-cells', /0,0/);
+    await first.getByRole('button', { name: '东 →', exact: true }).click();
+    await first.getByRole('button', { name: '提交计划', exact: true }).click();
+    await expect(first.getByTestId('plan')).toHaveText('草稿 → (3, 4)');
+    await expect(first.getByTestId('playback')).toContainText('第1拍');
+    await expect(first.locator('#room')).toHaveAttribute('data-position', '2,2');
+    await expect(first.locator('#room')).not.toHaveAttribute('data-memory-cells', /4,4/);
     await first.screenshot({ path: 'artifacts/exploration-beat1.png', fullPage: true });
     await first.clock.runFor(500);
     await expect(first.getByTestId('playback')).toContainText('第2拍');

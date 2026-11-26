@@ -3,11 +3,9 @@ import { buildClassicDetails } from './classic-details.js';
 import { classicCellSize } from './classic-prefabs.js';
 export { classicCellSize } from './classic-prefabs.js';
 
-export function buildClassicScene(board, material, mapMemory = { cells: [], edges: [] }) {
+function buildGrayLayout(board, material, mapMemory) {
   const group = new THREE.Group();
   const markers = [];
-  const details = buildClassicDetails(material);
-  group.add(details.group);
   const unknownGeometry = new THREE.BoxGeometry(3.88, 0.08, 3.88);
   const unknownMaterial = material('stone', 0, { glow: 0.18 });
   const known = new Set(board.cells.map(c => c.row + ',' + c.col));
@@ -34,15 +32,14 @@ export function buildClassicScene(board, material, mapMemory = { cells: [], edge
     markers.push(mesh);
     return mesh;
   }
-  // Flat terrain and low boundary symbols keep remembered layout distinct from the scene.
-  for (const cell of mapMemory.cells) {
+  for (const cell of mapMemory?.cells ?? []) {
     if (known.has(cell.row + ',' + cell.col)) continue;
     rememberedBox(new THREE.BoxGeometry(3.5, 0.06, 3.5), rememberedMaterial, position(cell).add(new THREE.Vector3(0, 0.08, 0)));
     if (cell.terrain === 'moss') rememberedBox(new THREE.BoxGeometry(1.15, 0.04, 0.85), markerMaterial, position(cell).add(new THREE.Vector3(-0.6, 0.13, 0.6)));
   }
   const currentEdges = new Set(board.edges.map(edge => edge.id));
   const rememberedDoors = [];
-  for (const edge of mapMemory.edges) {
+  for (const edge of mapMemory?.edges ?? []) {
     if (currentEdges.has(edge.id)) continue;
     const origin = position(edge.a).add(position(edge.b)).multiplyScalar(0.5).add(new THREE.Vector3(0, 0.2, 0));
     const angle = edge.a.col !== edge.b.col ? Math.PI / 2 : 0;
@@ -60,21 +57,44 @@ export function buildClassicScene(board, material, mapMemory = { cells: [], edge
   }
   return {
     group,
-    groundLightSpots: details.groundLightSpots,
-    animate: details.animate,
-    update(view) {
-      const doors = new Map([...view.terrainMemory, ...view.observation.doors].map((door) => [door.id, door.open]));
+    updateDoors(terrainMemory) {
+      const doors = new Map(terrainMemory.map(door => [door.id, door.open]));
       for (const { leaf, edge, angle } of rememberedDoors) leaf.rotation.y = angle + (doors.get(edge.id) ? Math.PI / 2 : 0);
-      const current = new Set(view.observation.cells.map(cell => cell.row + ',' + cell.col));
-      details.update({ ...board, cells: board.cells.filter(cell => current.has(cell.row + ',' + cell.col)),
-        edges: board.edges.filter(edge => current.has(edge.a.row + ',' + edge.a.col) || current.has(edge.b.row + ',' + edge.b.col)) }, doors);
-
     },
     dispose() {
-      details.dispose();
       for (const mesh of markers) mesh.geometry.dispose();
       rememberedMaterial.dispose(); markerMaterial.dispose();
       unknownGeometry.dispose(); unknownMaterial.dispose(); unknown.dispose();
+      group.removeFromParent();
+      group.clear();
+    },
+  };
+}
+
+export function buildClassicScene(material) {
+  const group = new THREE.Group();
+  const details = buildClassicDetails(material);
+  group.add(details.group);
+  let grayLayout;
+  let grayLayoutKey;
+  return {
+    group,
+    groundLightSpots: details.groundLightSpots,
+    animate: details.animate,
+    update({ board, mapMemory, terrainMemory, observation }) {
+      const nextGrayLayoutKey = JSON.stringify([board, mapMemory]);
+      if (nextGrayLayoutKey !== grayLayoutKey) {
+        grayLayout?.dispose();
+        grayLayout = buildGrayLayout(board, material, mapMemory);
+        group.add(grayLayout.group);
+        grayLayoutKey = nextGrayLayoutKey;
+      }
+      grayLayout.updateDoors(terrainMemory);
+      details.update(board, new Map(observation.doors.map(door => [door.id, door.open])));
+    },
+    dispose() {
+      grayLayout?.dispose();
+      details.dispose();
       group.clear();
     },
   };
