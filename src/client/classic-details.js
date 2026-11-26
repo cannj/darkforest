@@ -8,13 +8,14 @@ export function buildClassicDetails(material) {
   const group = new THREE.Group();
   const groundLightSpots = [];
   const animations = [];
+  const fireLights = [];
   let signature;
   function clear() {
     const geometries = new Set(); const materials = new Set();
     group.traverse(object => { if (object.isMesh) { geometries.add(object.geometry); materials.add(object.material); } });
     geometries.forEach(geometry => geometry.dispose());
     materials.forEach(surface => surface.dispose());
-    group.clear(); animations.length = 0; groundLightSpots.length = 0;
+    group.clear(); animations.length = 0; fireLights.length = 0; groundLightSpots.length = 0;
   }
   return {
     group, groundLightSpots,
@@ -34,6 +35,7 @@ export function buildClassicDetails(material) {
           const location = new THREE.Vector3(fire.x, fire.y + 1.28 * fire.scale, fire.z).multiply(roomScale).add(origin);
           const light = new THREE.PointLight(0xffbd85, 4.2 * fire.scale * roomScale.x ** 2, 5.5 * fire.scale * roomScale.z, 2);
           light.position.copy(location); group.add(light);
+          fireLights.push({ light, intensity: light.intensity, phase: fireLights.length * 1.7 });
           groundLightSpots.push(new THREE.Vector3(location.x, location.z, 3.05 * fire.scale * roomScale.z));
         }
       }
@@ -52,7 +54,12 @@ export function buildClassicDetails(material) {
         }
       }
     },
-    animate(time) { animations.forEach(animate => animate(time)); },
+    animate(time) {
+      animations.forEach(animate => animate(time));
+      for (const { light, intensity, phase } of fireLights) {
+        light.intensity = intensity * (1 + 0.08 * Math.sin(time * 9 + phase) + 0.05 * Math.sin(time * 17.9));
+      }
+    },
     dispose() { clear(); signature = undefined; },
   };
 }

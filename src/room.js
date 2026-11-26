@@ -249,6 +249,7 @@ export function buildRoom(scene, material, { sections, archCenter = -0.35 } = {}
   });
 
   if (sections) {
+    if (!sections.includes('braziers')) fires.length = 0;
     for (const object of created) {
       if (!sections.includes(object.userData.roomSection) ||
           (object.userData.roomSection === 'moss' && !sections.includes('arch') && object.position.y > 0.3)) object.removeFromParent();
