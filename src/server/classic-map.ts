@@ -24,8 +24,6 @@ const cells = [
   'LLSLLSWLSL',
 ];
 
-// Each mark describes the shared edge to the east or south of its cell.
-// A dot leaves the crossing open.
 const east = [
   '.........',
   '...#..w..',

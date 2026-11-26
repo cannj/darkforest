@@ -13,8 +13,6 @@ const sections = {
   'window-ruin': ['floor', 'pillars', 'moss', 'braziers'],
 };
 
-// The original room supplies every tile, dressed stone, plant and fire mesh.
-// Its walls are selected separately by shared edges, never by cell decoration.
 export function roomAsset(template, material, edge = false) {
   const group = new THREE.Group();
   const animate = buildRoom(group, material, { sections: edge ? ['arch', 'ivy'] : sections[template], archCenter: 0 });
@@ -41,7 +39,6 @@ export function roomAsset(template, material, edge = false) {
     shapes.forEach(shape => shape.dispose());
     output.add(new THREE.Mesh(geometry, surface));
   }
-  // Keep only the small animated flame/spark groups; all masonry is merged.
   const staticMeshes = [];
   group.traverse(object => { if (object.isMesh && !object.userData.animated) staticMeshes.push(object); });
   staticMeshes.forEach(object => object.removeFromParent());

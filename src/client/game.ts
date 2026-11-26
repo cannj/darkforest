@@ -17,6 +17,12 @@ export function mountGame(render: (view: PlayerView) => void) {
   let selected: (Position | null)[] = [];
   const directionOrigin = selectElement('direction-origin');
   let playbackTimer: ReturnType<typeof setTimeout> | undefined;
+  function cancelPlayback() {
+    if (playbackTimer === undefined) return;
+    clearTimeout(playbackTimer);
+    playbackTimer = undefined;
+    element('playback').textContent = '';
+  }
   const resultLabels = { moved: '移动成功', blocked: '移动受阻', waited: '等待' };
   function planText(moves: (Position | null)[]) {
     if (moves.length === 0) return ' · 等待';
@@ -106,13 +112,13 @@ export function mountGame(render: (view: PlayerView) => void) {
       return;
     }
     const next = parsed.data.view;
+    if (restoring || view?.beats[0]?.round !== next.beats[0]?.round) cancelPlayback();
     if (restoring || view?.round !== next.round) {
       selected = [...next.plan.moves];
       directionOrigin.value = 'planned';
       element('selection').textContent = `待提交${planText(selected)}`;
       restoring = false;
     }
-    if (view?.beats[0]?.round !== next.beats[0]?.round) clearTimeout(playbackTimer);
     view = next;
     serverOffset = next.serverTime - Date.now();
     countdown();
@@ -131,7 +137,7 @@ export function mountGame(render: (view: PlayerView) => void) {
     for (const button of buttons) button.disabled = next.plan.kind === 'locked' || next.phase === 'resolving';
     const replay = document.getElementById('replay');
     if (replay instanceof HTMLButtonElement) replay.disabled = next.beats.length === 0;
-    display(next);
+    if (playbackTimer === undefined) display(next);
   }
   connect();
   window.addEventListener('offline', () => socket.close());
@@ -156,12 +162,13 @@ export function mountGame(render: (view: PlayerView) => void) {
   });
   element('replay').addEventListener('click', () => {
     if (!view || view.beats.length === 0) return;
-    clearTimeout(playbackTimer);
+    cancelPlayback();
     const snapshot = view;
     let index = 0;
     function advance() {
       const beat = snapshot.beats[index++];
       if (!beat) {
+        playbackTimer = undefined;
         element('playback').textContent = `播放完成 · 第${snapshot.beats[0]?.round ?? snapshot.round}回合`;
         display(view ?? snapshot);
         return;

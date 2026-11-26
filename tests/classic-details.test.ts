@@ -6,13 +6,13 @@ import { buildClassicScene } from '../src/client/classic-scene.js';
 test('当前石室有火盆局部光，离开当前视野后移除模型和灯光', () => {
   const material = () => new THREE.MeshBasicMaterial();
   const board = { rows: 10, cols: 10, cells: [{ row: 1, col: 1, terrain: 'stone', template: 'stone-chamber' }], edges: [] };
-  const detail = buildClassicScene(board, material);
-  detail.update({ terrainMemory: [], observation: { cells: [{ row: 1, col: 1 }], doors: [] } });
+  const detail = buildClassicScene(material);
+  detail.update({ board, terrainMemory: [], observation: { doors: [] } });
   const lights = [];
   detail.group.traverse(object => { if (object.isPointLight) lights.push(object); });
   expect(lights).toHaveLength(2);
   expect(detail.groundLightSpots).toHaveLength(2);
-  detail.update({ terrainMemory: [], observation: { cells: [], doors: [] } });
+  detail.update({ board: { ...board, cells: [] }, terrainMemory: [], observation: { doors: [] } });
   const detailedObjects = [];
   detail.group.traverse(object => { if (object.isPointLight || (object.isMesh && !object.isInstancedMesh)) detailedObjects.push(object); });
   expect(detailedObjects).toHaveLength(0);

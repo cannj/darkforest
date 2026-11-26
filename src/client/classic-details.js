@@ -2,8 +2,6 @@ import * as THREE from 'three';
 import { braziers } from '../room.js';
 import { roomAsset, edgePrefab, roomScale, classicCellSize } from './classic-prefabs.js';
 
-// Input is the server's sparse current-only BoardProjection. No remembered or
-// unknown cell is ever passed through the room factory.
 export function buildClassicDetails(material) {
   const group = new THREE.Group();
   const groundLightSpots = [];
