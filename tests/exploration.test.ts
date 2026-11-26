@@ -32,3 +32,41 @@ test('逐拍布局不含后拍才看到的格，旧房间保留完整地图和�
   expect(legacy.view(l)).not.toHaveProperty('exploration');
   expect(legacy.view(l).playback[0]).not.toHaveProperty('board');
 });
+
+test('地图记忆保留初始及途经布局并与当前视野和其他座位隔离', () => {
+  const room = new Room('remember', { exploration: 'player-vision', board: { ...publicBoard, cells: [...publicBoard.cells].reverse(), edges: [] }, spawns: [{ row: 0, col: 0 }, { row: 4, col: 4 }] });
+  const a = room.join(); const b = room.join();
+  expect(room.view(a).mapMemory?.cells.map(c => [c.row, c.col])).toEqual([[0,0],[0,1],[1,0],[1,1]]);
+  room.command(a, { kind: 'plan', round: 1, requestId: 'move', moves: [{ row: 0, col: 1 }, { row: 0, col: 2 }] });
+  room.command(a, { kind: 'lock', round: 1, requestId: 'a' });
+  room.command(b, { kind: 'lock', round: 1, requestId: 'b' });
+  const remembered = playerViewSchema.parse(room.view(a));
+  expect(remembered.mapMemory?.cells.map(c => [c.row, c.col])).toEqual([[0,0],[0,1],[0,2],[0,3],[1,0],[1,1],[1,2],[1,3]]);
+  expect(remembered.board.cells.some(c => c.row === 0 && c.col === 0)).toBe(false);
+  expect(room.view(b).mapMemory?.cells.map(c => [c.row, c.col])).toEqual([[3,3],[3,4],[4,3],[4,4]]);
+  expect(room.view(a).mapMemory).toEqual(remembered.mapMemory);
+});
+
+test('记忆保留看见过的墙门窗及门状态，共享边不揭示遮挡后的格子', () => {
+  const room = new Room('remember-edges', { exploration: 'player-vision', board: { ...publicBoard, edges: [
+    { id: 'z-wall', a: { row: 0, col: 1 }, b: { row: 0, col: 2 }, kind: 'wall' },
+    { id: 'b-window', a: { row: 1, col: 0 }, b: { row: 1, col: 1 }, kind: 'window' },
+    { id: 'a-door', a: { row: 0, col: 0 }, b: { row: 0, col: 1 }, kind: 'door' },
+  ] }, spawns: [{ row: 0, col: 0 }, { row: 4, col: 4 }] });
+  const a = room.join(); const b = room.join();
+  const initial = room.view(a);
+  expect(initial.mapMemory?.edges.map(e => e.id)).toEqual(['a-door', 'b-window']);
+  expect(initial.mapMemory?.cells.some(c => c.row === 0 && c.col === 1)).toBe(false);
+  expect(initial.terrainMemory).toEqual([{ id: 'a-door', open: false, round: 1, beat: 0 }]);
+  room.command(a, { kind: 'plan', round: 1, requestId: 'move', moves: [{ row: 1, col: 0 }, { row: 2, col: 0 }] });
+  room.command(a, { kind: 'lock', round: 1, requestId: 'a' }); room.command(b, { kind: 'lock', round: 1, requestId: 'b' });
+  const moved = room.view(a);
+  expect(moved.board.edges.some(e => e.id === 'a-door')).toBe(false);
+  expect(moved.mapMemory?.edges.map(e => e.id)).toEqual(['a-door', 'b-window']);
+  expect(moved.terrainMemory).toEqual([{ id: 'a-door', open: false, round: 1, beat: 1 }]);
+  expect(room.view(b).mapMemory?.edges).toEqual([]);
+  moved.mapMemory?.cells.splice(0);
+  expect(room.view(a).mapMemory?.cells.length).toBeGreaterThan(0);
+  const legacy = new Room('legacy-memory'); const l = legacy.join();
+  expect(legacy.view(l)).not.toHaveProperty('mapMemory');
+});

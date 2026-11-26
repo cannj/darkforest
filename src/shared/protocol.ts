@@ -70,6 +70,8 @@ export const sightingSchema = observedPlayerSchema.extend({ round: z.int().posit
 export type Sighting = z.infer<typeof sightingSchema>;
 export const terrainMemorySchema = z.object({ id: z.string(), open: z.boolean(), round: z.int().positive(), beat: z.int().nonnegative() }).strict();
 export type TerrainMemory = z.infer<typeof terrainMemorySchema>;
+export const mapMemorySchema = z.object({ cells: z.array(cellSchema), edges: z.array(edgeSchema) }).strict();
+export type MapMemory = z.infer<typeof mapMemorySchema>;
 export const confrontationSchema = z.object({ opponent: playerIdSchema, round: z.int().positive(), beat: z.int().nonnegative() }).strict();
 export type Confrontation = z.infer<typeof confrontationSchema>;
 export const playbackSchema = z.object({
@@ -82,6 +84,7 @@ export const playerViewSchema = z.object({
   roomId: roomIdSchema,
   board: boardProjectionSchema,
   exploration: z.literal('player-vision').optional(),
+  mapMemory: mapMemorySchema.optional(),
   round: z.int().positive(),
   phase: z.enum(['waiting', 'planning', 'resolving']),
   deadline: z.number().nonnegative().nullable(),

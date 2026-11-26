@@ -1,4 +1,4 @@
-import type { PlayerId, Observation, Playback, Sighting, TerrainMemory, PlayerView } from '../shared/protocol.ts';
+import type { MapMemory, PlayerId, Observation, Playback, Sighting, TerrainMemory, PlayerView } from '../shared/protocol.ts';
 import { canSee, type RoomSetup } from './board.ts';
 import type { CommittedBeat, Confrontation, PlayerState } from './rules.ts';
 
@@ -17,6 +17,7 @@ function playerFor(players: PlayerState[], identity: PlayerId): PlayerState {
 }
 
 export class PlayerViews {
+  private mapMemories = new Map<PlayerId, MapMemory>();
   private memories = new Map<PlayerId, Sighting[]>();
   private terrainMemories = new Map<PlayerId, TerrainMemory[]>();
   private playback = new Map<PlayerId, Playback[]>();
@@ -39,6 +40,7 @@ export class PlayerViews {
       roomId: state.roomId, board: projectBoard(state.setup, observation), ...(state.setup.exploration ? { exploration: state.setup.exploration } : {}), round: state.round, phase: state.phase, deadline: state.deadline, serverTime: state.serverTime, seats: state.players.length,
       confrontations: state.confrontations.filter((entry) => entry.participants.includes(identity)).map(({ participants, round, beat }) => ({ opponent: participants[0] === identity ? participants[1] : participants[0], round, beat })),
       self: { id: player.id, position: player.position }, plan: player.plan, result: state.beats.flatMap((beat) => beat.results).findLast((r) => r.playerId === identity && r.result !== 'waited')?.result ?? player.result,
+      ...(state.setup.exploration ? { mapMemory: this.mapMemories.get(identity) ?? { cells: [], edges: [] } } : {}),
       terrainMemory: this.terrainMemories.get(identity) ?? [],
       observation, memory: this.memories.get(identity) ?? [], playback: this.playback.get(identity) ?? [],
       beats: state.beats.flatMap((beat) => beat.results.filter((result) => result.playerId === identity)
@@ -60,6 +62,16 @@ export class PlayerViews {
 
   capture(identity: PlayerId, state: ViewState, beat: number): Observation {
     const observation = this.observe(identity, state);
+    if (state.setup.exploration) {
+      const previous = this.mapMemories.get(identity) ?? { cells: [], edges: [] };
+      const current = projectBoard(state.setup, observation);
+      const cells = new Map([...previous.cells, ...current.cells].map(cell => [cell.row + ',' + cell.col, cell]));
+      const edges = new Map([...previous.edges, ...current.edges].map(edge => [edge.id, edge]));
+      this.mapMemories.set(identity, {
+        cells: [...cells.values()].sort((a, b) => a.row - b.row || a.col - b.col),
+        edges: [...edges.values()].sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+      });
+    }
     const memories = this.memories.get(identity) ?? [];
     for (const player of observation.players) {
       const previous = memories.findIndex((s) => s.id === player.id);
