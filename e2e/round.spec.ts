@@ -46,7 +46,7 @@ test('两个隔离浏览器在 10×10 经典地图完成真实联机回合', asy
       expect(message.view.board).toMatchObject({ version: 'classic-v1', rows: 10, cols: 10 });
       expect(message.view.board.cells.map(({ row, col }) => ({ row, col }))).toEqual(message.view.observation.cells);
       expect(message.view.plan).toEqual({ kind: 'draft', moves: [] });
-      expect(Object.keys(message.view).sort()).toEqual(['beats', 'board', 'confrontations', 'deadline', 'exploration', 'memory', 'observation', 'phase', 'plan', 'playback', 'result', 'roomId', 'round', 'seats', 'self', 'serverTime', 'terrainMemory']);
+      expect(Object.keys(message.view).sort()).toEqual(['beats', 'board', 'confrontations', 'deadline', 'exploration', 'mapMemory', 'memory', 'observation', 'phase', 'plan', 'playback', 'result', 'roomId', 'round', 'seats', 'self', 'serverTime', 'terrainMemory']);
     }
   }
   await second.getByRole('button', { name: '北 ↑', exact: true }).click();
