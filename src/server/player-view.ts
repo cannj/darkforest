@@ -28,7 +28,7 @@ export class PlayerViews {
     for (const player of state.players) {
       const observation = this.capture(player.id, state, beat);
       const frames = this.playback.get(player.id) ?? [];
-      frames.push(structuredClone({ round: state.round, beat, self: player.position, ...(state.setup.exploration ? { board: projectBoard(state.setup, observation) } : {}), observation, memory: this.memories.get(player.id) ?? [], terrainMemory: this.terrainMemories.get(player.id) ?? [] }));
+      frames.push(structuredClone({ round: state.round, beat, self: player.position, ...(state.setup.exploration ? { board: projectBoard(state.setup, observation), mapMemory: this.mapMemories.get(player.id) ?? { cells: [], edges: [] } } : {}), observation, memory: this.memories.get(player.id) ?? [], terrainMemory: this.terrainMemories.get(player.id) ?? [] }));
       this.playback.set(player.id, frames);
     }
   }

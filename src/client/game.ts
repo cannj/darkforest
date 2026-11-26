@@ -168,7 +168,7 @@ export function mountGame(render: (view: PlayerView) => void) {
       }
       element('playback').textContent = `第${beat.beat}拍 · ${resultLabels[beat.result]}`;
       const frame = snapshot.playback.find((f) => f.beat === beat.beat);
-      if (frame) display({ ...snapshot, board: frame.board ?? snapshot.board, mapMemory: undefined, self: { ...snapshot.self, position: frame.self }, observation: frame.observation, memory: frame.memory, terrainMemory: frame.terrainMemory });
+      if (frame) display({ ...snapshot, board: frame.board ?? snapshot.board, mapMemory: frame.mapMemory, self: { ...snapshot.self, position: frame.self }, observation: frame.observation, memory: frame.memory, terrainMemory: frame.terrainMemory });
       playbackTimer = setTimeout(advance, 500);
     }
     advance();

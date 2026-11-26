@@ -78,6 +78,7 @@ export const playbackSchema = z.object({
   round: z.int().positive(), beat: z.int().positive(), self: positionSchema,
   observation: observationSchema, memory: z.array(sightingSchema), terrainMemory: z.array(terrainMemorySchema),
   board: boardProjectionSchema.optional(),
+  mapMemory: mapMemorySchema.optional(),
 }).strict();
 export type Playback = z.infer<typeof playbackSchema>;
 export const playerViewSchema = z.object({
