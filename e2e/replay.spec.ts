@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { expect, test } from '@playwright/test';
 import { serverMessageSchema, type PlayerView } from '../src/shared/protocol.ts';
 import { digest, roundRecordSchema } from '../src/server/recording.ts';
+import { approachCourtyard } from './classic-setup.js';
 
 test('隔离浏览器真实对局记录对峙和超时，开发入口重跑并核对实际下发观察', async ({ browser }) => {
   test.setTimeout(65_000);
@@ -23,26 +24,28 @@ test('隔离浏览器真实对局记录对峙和超时，开发入口重跑并�
   const url = `http://127.0.0.1:5174/?room=${roomId}`;
   try {
     await first.goto(url); await second.goto(url);
-    await expect(second.getByTestId('seat')).toHaveText('座位 p2');
+    await approachCourtyard(first, second);
+    await first.getByRole('button', { name: '东南 ↘', exact: true }).click();
+    await first.getByRole('button', { name: '提交计划', exact: true }).click();
     await second.getByRole('button', { name: '西北 ↖', exact: true }).click();
     await second.getByRole('button', { name: '提交计划', exact: true }).click();
     await first.getByRole('button', { name: '锁定计划', exact: true }).click();
     await second.getByRole('button', { name: '锁定计划', exact: true }).click();
-    await expect(first.getByTestId('round')).toContainText('第 2 回合');
+    await expect(first.getByTestId('round')).toHaveText('第 3 回合 · 计划阶段');
     await expect(first.getByTestId('confrontations')).toContainText('与 p2 对峙');
     await first.getByRole('button', { name: '锁定计划', exact: true }).click();
     await second.getByRole('button', { name: '南 ↓', exact: true }).click();
     await second.getByRole('button', { name: '提交计划', exact: true }).click();
-    await expect(second.getByTestId('plan')).toContainText('(3, 2)');
-    await expect(first.getByTestId('round')).toContainText('第 3 回合', { timeout: 35_000 });
-    await expect(second.getByTestId('position')).toHaveText('当前位置 (2, 2)');
+    await expect(second.getByTestId('plan')).toContainText('(6, 5)');
+    await expect(first.getByTestId('round')).toHaveText('第 4 回合 · 计划阶段', { timeout: 35_000 });
+    await expect(second.getByTestId('position')).toHaveText('当前位置 (5, 5)');
     const directory = process.env.MATCH_LOG_DIR ?? 'artifacts/matches';
     const file = readdirSync(directory).find(file => file.startsWith(`${roomId}-`));
     expect(file).toBeDefined();
     const path = join(directory, file ?? 'missing');
     const records = readFileSync(path, 'utf8').trim().split('\n').slice(1).map(line => roundRecordSchema.parse(JSON.parse(line)));
-    expect(records).toHaveLength(2);
-    expect(records[1]?.inputs).toEqual([{ playerId: 'p1', source: 'locked', moves: [] }, { playerId: 'p2', source: 'timeout', moves: [] }]);
+    expect(records).toHaveLength(3);
+    expect(records[2]?.inputs).toEqual([{ playerId: 'p1', source: 'locked', moves: [] }, { playerId: 'p2', source: 'timeout', moves: [] }]);
     for (const record of records) for (const views of [firstViews, secondViews]) {
       const view = views.find(view => view.round === record.round && view.phase === 'resolving');
       expect(view).toBeDefined();
@@ -53,7 +56,7 @@ test('隔离浏览器真实对局记录对峙和超时，开发入口重跑并�
       }));
     }
     const result = execFileSync(process.execPath, ['--experimental-strip-types', 'src/server/replay-cli.ts', path], { encoding: 'utf8' });
-    expect(JSON.parse(result)).toEqual({ roomId, rounds: 2 });
+    expect(JSON.parse(result)).toEqual({ roomId, rounds: 3 });
     await test.info().attach('recorded-match', { path, contentType: 'application/x-ndjson' });
   } finally { await a.close(); await b.close(); }
 });

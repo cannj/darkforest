@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { WebSocket, WebSocketServer } from 'ws';
 import { z } from 'zod';
 import { roomIdSchema, type PlayerId, type ServerMessage } from '../shared/protocol.ts';
+import { classicRoomSetup } from './classic-map.ts';
 import { Room } from './room.ts';
 import { createRecorder } from './recording.ts';
 
@@ -51,7 +52,7 @@ server.on('connection', (socket, request) => {
     credential = resume;
     session = { ...previous, socket };
   } else {
-    const room = rooms.get(parsed.data) ?? new Room(parsed.data, {}, { now: Date.now, roundDurationMs, settlementDurationMs,
+    const room = rooms.get(parsed.data) ?? new Room(parsed.data, classicRoomSetup, { now: Date.now, roundDurationMs, settlementDurationMs,
       record: createRecorder(process.env.MATCH_LOG_DIR ?? '.local/matches', parsed.data) });
     try {
       session = { room, identity: room.join(), socket };

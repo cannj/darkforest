@@ -119,7 +119,7 @@ export function mountGame(render: (view: PlayerView) => void) {
     element('connection').textContent = next.seats < 2 ? '已连接 · 等待另一名玩家' : '两名玩家已入座';
     element('seat').textContent = `座位 ${next.self.id}`;
 
-    element('board-summary').textContent = `公开地图 ${next.board.rows} × ${next.board.cols}`;
+    element('board-summary').textContent = `${next.exploration ? '棋盘外框' : '公开地图'} ${next.board.rows} × ${next.board.cols}`;
     element('position').textContent = `当前位置 (${next.self.position.row}, ${next.self.position.col})`;
     element('plan').textContent = `${next.plan.kind === 'locked' ? '已锁定' : '草稿'}${planText(next.plan.moves)}`;
     element('beat-results').replaceChildren(...next.beats.map((beat) => {
@@ -168,7 +168,7 @@ export function mountGame(render: (view: PlayerView) => void) {
       }
       element('playback').textContent = `第${beat.beat}拍 · ${resultLabels[beat.result]}`;
       const frame = snapshot.playback.find((f) => f.beat === beat.beat);
-      if (frame) display({ ...snapshot, self: { ...snapshot.self, position: frame.self }, observation: frame.observation, memory: frame.memory, terrainMemory: frame.terrainMemory });
+      if (frame) display({ ...snapshot, board: frame.board ?? snapshot.board, self: { ...snapshot.self, position: frame.self }, observation: frame.observation, memory: frame.memory, terrainMemory: frame.terrainMemory });
       playbackTimer = setTimeout(advance, 500);
     }
     advance();

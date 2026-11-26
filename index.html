@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#171622" />
-    <title>黑暗森林 · 暮林石室</title>
+    <title>黑暗森林 · 经典地图</title>
     <link rel="stylesheet" href="/style.css" />
   </head>
   <body>
@@ -12,16 +12,18 @@
       <header>
         <h1>暮林石室</h1>
         <div class="controls">
+          <button id="map-overview" type="button" hidden>全图</button>
+          <button id="focus-self" type="button" hidden>近看自己</button>
           <button id="reset-view" type="button" disabled>重置视角</button>
           <button id="edges" type="button" aria-pressed="true" disabled>描边</button>
         </div>
       </header>
       <div class="stage">
-        <canvas id="room" width="320" height="192" aria-label="青苔覆盖的石室和两只火盆。拖动画布或按方向键旋转视角。"></canvas>
+        <canvas id="room" width="480" height="288" aria-label="青苔覆盖的石室和两只火盆。拖动画布或按方向键旋转视角。"></canvas>
         <p id="error" role="status" hidden></p>
       </div>
       <footer>
-        <span>320 × 192 · 最近邻放大</span>
+        <span>480 × 288 · 最近邻放大</span>
         <span>拖动旋转</span>
       </footer>
       <section id="game" aria-label="联机对局">
@@ -65,7 +67,7 @@
             </div>
           </div>
         </div>
-        <p>亮格为当前视野，暗格为迷雾。橙色为自己，绿色为当前目标，空心标记为旧目击。格边石墙、木门和窗框为公开地图。</p>
+        <p>亮格为当前视野，空灰格为未知区域。橙色为自己，绿色为当前目标，空心标记为旧目击。格边石墙、木门和窗框随视野揭示。</p>
         <ul id="sightings" data-testid="sightings" aria-label="目击与地图记忆"></ul>
         <ol id="beat-results" data-testid="beat-results" aria-label="自己的上轮逐拍结果"></ol>
         <button id="replay" disabled>播放上轮</button>

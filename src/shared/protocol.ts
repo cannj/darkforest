@@ -5,12 +5,12 @@ export const playerIdSchema = z.enum(['p1', 'p2', 'p3']);
 export type PlayerId = z.infer<typeof playerIdSchema>;
 export const positionSchema = z.object({ row: z.int().nonnegative(), col: z.int().nonnegative() }).strict();
 export type Position = z.infer<typeof positionSchema>;
-export const cellSchema = positionSchema.extend({ terrain: z.enum(['stone', 'moss']) }).strict();
+export const cellSchema = positionSchema.extend({ terrain: z.enum(['stone', 'moss']), template: z.enum(['stone-chamber', 'open-court', 'broken-corner', 'window-ruin']).optional() }).strict();
 export const edgeSchema = z.object({
   id: z.string().min(1), a: positionSchema, b: positionSchema,
   kind: z.enum(['wall', 'door', 'window']),
 }).strict();
-export const boardSchema = z.object({
+export const boardProjectionSchema = z.object({
   version: z.string().min(1), rows: z.int().positive(), cols: z.int().positive(),
   cells: z.array(cellSchema), edges: z.array(edgeSchema),
 }).strict().superRefine((board, ctx) => {
@@ -18,11 +18,15 @@ export const boardSchema = z.object({
   const inside = (p: Position) => p.row < board.rows && p.col < board.cols;
   const cells = new Set(board.cells.map(key));
   const edges = new Set(board.edges.map((e) => [key(e.a), key(e.b)].sort().join(':')));
-  if (cells.size !== board.rows * board.cols || board.cells.length !== cells.size || board.cells.some((c) => !inside(c)))
-    ctx.addIssue({ code: 'custom', message: '地图必须完整且不重复地声明格子' });
+  if (board.cells.length !== cells.size || board.cells.some((c) => !inside(c)))
+    ctx.addIssue({ code: 'custom', message: '地图格子必须在界内且不重复' });
   if (edges.size !== board.edges.length || new Set(board.edges.map((e) => e.id)).size !== board.edges.length ||
       board.edges.some((e) => !inside(e.a) || !inside(e.b) || Math.abs(e.a.row - e.b.row) + Math.abs(e.a.col - e.b.col) !== 1))
     ctx.addIssue({ code: 'custom', message: '格边必须唯一且连接界内正交相邻格' });
+});
+export type BoardProjection = z.infer<typeof boardProjectionSchema>;
+export const boardSchema = boardProjectionSchema.superRefine((board, ctx) => {
+  if (board.cells.length !== board.rows * board.cols) ctx.addIssue({ code: 'custom', message: '权威地图必须完整声明格子' });
 });
 export type Board = z.infer<typeof boardSchema>;
 export const publicBoard: Board = boardSchema.parse({
@@ -71,11 +75,13 @@ export type Confrontation = z.infer<typeof confrontationSchema>;
 export const playbackSchema = z.object({
   round: z.int().positive(), beat: z.int().positive(), self: positionSchema,
   observation: observationSchema, memory: z.array(sightingSchema), terrainMemory: z.array(terrainMemorySchema),
+  board: boardProjectionSchema.optional(),
 }).strict();
 export type Playback = z.infer<typeof playbackSchema>;
 export const playerViewSchema = z.object({
   roomId: roomIdSchema,
-  board: boardSchema,
+  board: boardProjectionSchema,
+  exploration: z.literal('player-vision').optional(),
   round: z.int().positive(),
   phase: z.enum(['waiting', 'planning', 'resolving']),
   deadline: z.number().nonnegative().nullable(),
