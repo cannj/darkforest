@@ -249,6 +249,7 @@ function start() {
     orbit.target.copy(ownPosition);
     camera.position.copy(ownPosition).add(offset);
     orbit.update();
+    canvas.dataset.cameraMode = 'follow';
     viewChanged = true;
   }
   focusButton.addEventListener('click', () => {
@@ -257,13 +258,13 @@ function start() {
     camera.updateProjectionMatrix();
     focusOnSelf();
   });
-  overviewButton.addEventListener('click', () => { focusSelf = false; orbit.reset(); });
+  overviewButton.addEventListener('click', () => { focusSelf = false; orbit.reset(); canvas.dataset.cameraMode = 'overview'; });
   canvas.addEventListener('pointerdown', (event) => {
-    if (event.button === 2) focusSelf = false;
+    if (event.button === 2 || event.button === 0 && (event.shiftKey || event.ctrlKey || event.metaKey)) { focusSelf = false; canvas.dataset.cameraMode = 'free'; }
   });
   mountGame((view) => {
     const isClassic = view.exploration === 'player-vision' || view.board.version === 'classic-v1';
-    const nextLayoutKey = JSON.stringify(view.board);
+    const nextLayoutKey = JSON.stringify([view.board, view.mapMemory]);
     const cellSize = isClassic ? classicCellSize : 1;
     const x = (col) => (col - (view.board.cols - 1) / 2) * cellSize;
     const z = (row) => (row - (view.board.rows - 1) / 2) * cellSize;
@@ -279,7 +280,7 @@ function start() {
       focusButton.hidden = overviewButton.hidden = !isClassic;
       if (newBoard) focusSelf = false;
       if (isClassic) {
-        classic = buildClassicScene(view.board, material);
+        classic = buildClassicScene(view.board, material, view.mapMemory);
         board.add(classic.group);
         if (newBoard) {
           const halfHeight = Math.max(view.board.rows, view.board.cols) * classicCellSize * 0.44;
@@ -297,6 +298,9 @@ function start() {
           camera.updateProjectionMatrix();
           orbit.update();
           orbit.saveState();
+          focusSelf = true;
+          camera.zoom = 3.2;
+          camera.updateProjectionMatrix();
           document.querySelector('h1').textContent = '黑暗森林 · 经典地图';
         }
       } else {
@@ -348,9 +352,12 @@ function start() {
     canvas.dataset.position = `${view.self.position.row},${view.self.position.col}`;
     canvas.dataset.visiblePlayers = view.observation.players.map((p) => p.id).join(',');
     canvas.dataset.visibleCells = String(visible.size);
+    canvas.dataset.memoryCells = (view.mapMemory?.cells ?? []).map(c => `${c.row},${c.col}`).join(';');
+    canvas.dataset.rememberedCells = (view.mapMemory?.cells ?? []).filter(c => !visible.has(`${c.row},${c.col}`)).map(c => `${c.row},${c.col}`).join(';');
     canvas.dataset.layoutCells = view.board.cells.map(c => `${c.row},${c.col}`).join(';');
     canvas.dataset.layoutEdges = view.board.edges.map(e => e.id).join(';');
-    canvas.setAttribute('aria-label', `${isClassic ? '探索棋盘' : '公开棋盘'}，自己的棋子位于行 ${view.self.position.row} 列 ${view.self.position.col}。当前可见 ${visible.size} 格、${view.observation.players.length} 名目标。拖动或按方向键旋转视角。`);
+    canvas.dataset.cameraMode = isClassic ? (focusSelf ? 'follow' : canvas.dataset.cameraMode ?? 'overview') : 'legacy';
+    canvas.setAttribute('aria-label', `${isClassic ? '探索棋盘' : '公开棋盘'}，自己的棋子位于行 ${view.self.position.row} 列 ${view.self.position.col}。当前可见 ${visible.size} 格、${view.observation.players.length} 名目标。已探索记忆 ${(view.mapMemory?.cells.length ?? 0) - (view.mapMemory ? visible.size : 0)} 格。拖动或按方向键旋转视角。`);
     viewChanged = true;
   });
   const edges = { normalEdgeStrength: 0.14, depthEdgeStrength: 0.22 };
@@ -410,7 +417,7 @@ function start() {
   });
 
   resetView.disabled = false;
-  resetView.addEventListener('click', () => { focusSelf = false; orbit.reset(); });
+  resetView.addEventListener('click', () => { focusSelf = false; orbit.reset(); canvas.dataset.cameraMode = 'overview'; });
 
   toggle.disabled = false;
   toggle.addEventListener('click', () => {
